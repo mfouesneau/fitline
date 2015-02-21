@@ -680,6 +680,8 @@ def main(fname='Galaxy_NSCs_reff_early.dat', nsamp=50, nboot=1000,
 # and only from a command line call
 if __name__ == '__main__':
 
+    # read config file first to get default values
+
     opts = (
         ('-f', '--savefig', dict(dest="savefig", default='False',  help="Generate figures with the desired format (pdf, png...)", type='str')),
         ('-n', '--nsamp',   dict(dest="nsamp", help="number of samples to represent per data point uncertainties", default=20, type='int')),
@@ -692,18 +694,35 @@ if __name__ == '__main__':
         ('-o', '--output',   dict(dest="output", help="export the samples into a file", default='None', type='str')),
         ('--x12label',   dict(dest="x12label", help="X-label of the top-right plot (it can be in latex form)", default='None', type='str')),
         ('--y12label',   dict(dest="y12label", help="Y-label of the top-right plot (it can be in latex form)", default='None', type='str')),
+        ('-c', '--config',   dict(dest="configfname", help="Configuration file to use for default values", default='None', type='str')),
     )
 
     from optparse import OptionParser
-    parser = OptionParser()
+    parser = OptionParser(__doc__)
 
     for ko in opts:
         parser.add_option(*ko[:-1], **ko[-1])
 
     (options, args) = parser.parse_args()
 
-    output = options.__dict__.pop('output')
+    configfname = options.__dict__.pop('configfname')
 
+    if configfname not in [None, 'None', 'none']:
+        from configparser import ConfigParser
+        config = ConfigParser()
+        config.read(configfname)
+        kwargs = config['BTMC']
+
+        parser = OptionParser()
+        for ko in opts:
+            key = ko[:-1]
+            cfg = ko[-1]
+            if cfg['dest'] in kwargs:
+                cfg['default'] = kwargs[cfg['dest']]
+
+            parser.add_option(*ko[:-1], **ko[-1])
+
+    output = options.__dict__.pop('output')
     models = main(*args, **options.__dict__)
 
     if output not in ('None', 'none', None):
