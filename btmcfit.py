@@ -1,100 +1,11 @@
-r""" Fitting a straigh line with non-symmetric (but Gaussian) uncertainties
-
-More like the frequentist approach here, but can be adapted to do MCMC fitting
-
-If we define the data set D with uncertainties E of :math:`{d_k, e_k}`
-independent observations and a model M predicting what the data should look
-like. It comes through Bayes rule:
-
-.. math::
-    p(M | D, E)      = 1 / Z  prod_k P(d_k| M, e_k) P(M)
-
-`Z` is the evidence (normalization factor)
-
-
-Non-symmetric uncertainties
----------------------------
-
-This becomes trivial when uncertaintes are non-correlated by observing that it
-corresponds to a skewed normal distribution. The latter can be very simply
-defined by the closed form of a split normal distribution.
-
-The split normal distribution arises from merging two opposite halves of two
-probability density functions (PDFs) of normal distributions in their common
-mode.
-
-The PDF of the split normal distribution is given by:
-
-.. math::
-
-    f(x;\mu,\sigma_1,\sigma_2)= A \exp (- \frac {(x-\mu)^2}{2 \sigma_1^2})    if  x < \mu
-    f(x;\mu,\sigma_1,\sigma_2)=   A \exp (- \frac {(x-\mu)^2}{2 \sigma_2^2})   otherwise
-
-where
-
-.. math::
-    A = \sqrt{2/\pi} (\sigma_1+\sigma_2)^{-1}.
-
-
-Finite Data Sample
-------------------
-
-The finite data can be either discarded or accounted for by bootstrapping the
-data. In other words, do multiple fits (with the above) to get one value per
-resampling and combine them to get a PDF by integrating the different bootstrap
-realizations.
-
-
-Fitting a straight line to data
--------------------------------
-
-We define our model as follow:
-
-.. math::
-
-    y_{model}(x | \alpha, \beta) = \alpha * x + \beta
-
-I assume here that we have perfect "fake" data to work with, (x_{data},
-y_{data}), so that the MAP is actually trivial to get from the covariance of the
-sample:
-
-.. math::
-
-    C = cov(x_{data}, y_{data})
-
-    \alpha = C[1,0] / C[0,0] ** 2
-    \beta = mean(y_{data}) - \alpha * mean(x_{data})
-
-
-Hat trick
----------
-
-The approximation that we propose to do is to replace the data point d_k by a
-sampling od d_k following the distribution given by e_k. Here we suppose
-normally distributed uncertainties.
-
-it comes that either you can do
-    p(D | M) p(M) = prod_k \Sum_j (P(d_{k,j}| M) P(M)),
-when you use all the samples once, or
-    p(D | M) p(M) = \Sum_j \prod_k (P(d_{k,j}| M) P(M)),
-in the more proper way. The latter is marginalization of the posterior
-distribution over noise, the former is faking data.
-
-It is clear that both version will not lead to the same result, in particular
-the final PDF of M.
-
-In this version of the script I consider the former trick implementation as it
-also give me the possibility to do both with the same code. Simply increase the
-bootstrapping number of realizations and put the sampling to 1 random sample.
-
-.. Note::
-
-    I actually ran both modes and get the same answer
+r""" Fitting a straight line with non-symmetric (but Gaussian) uncertainties
 
 .. Example::
 
-    python template.py <file> -N 200 -n 10
-    python template.py <file> -N 200 -n 1 --xnorm 6 --ynorm 0.5 --xfloor 10 --yfloor 10
+    >>> python btmc.py <file> -N 200 -n 10 -c <default.cfg>
+
+    >>> python btmc.py <file> -N 200 -n 1\
+           --xnorm 6 --ynorm 0.5 --xfloor 10 --yfloor 10
 """
 # make this works for both python 2 and python 3
 from __future__ import print_function
