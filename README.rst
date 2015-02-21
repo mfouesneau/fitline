@@ -1,3 +1,6 @@
+Fitting a straight line with non-symmetric uncertainties
+========================================================
+
 This repository is an exercise I had with `Iskren Georgiev`_ when he was
 looking at linear correlations between the stellar mass of galaxies and the
 properties of their central nuclear star cluster.
