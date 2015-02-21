@@ -26,6 +26,8 @@ Example usage
                 --y12label '$r_{\rm eff,NSC}$' \
                 --xnorm 6.314 --ynorm .40
 
+.. image:: doc/example.png
+
 
 Command line details
 --------------------
