@@ -94,7 +94,7 @@ def MAP(x, y, xmin, xmax, ymin, ymax, nsamp=1000, xnorm=6, ynorm=0.5, errorfloor
 
     cov = np.cov(xdata, ydata)
 
-    alpha = cov[1,0] / (cov[0, 0] ** 2)
+    alpha = cov[1,0] / (cov[0, 0])
     beta = (ydata - ynorm).mean() - alpha * (xdata - xnorm).mean()
 
     # trying to get residual perpendicularly to the line
