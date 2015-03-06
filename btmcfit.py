@@ -299,7 +299,7 @@ def hpd(x, alpha):
         return np.array([ hpd(x, ak) for ak in alpha ])
 
     # Transpose first, then sort
-    tx = np.transpose(x, list(range(x.ndim)[1:]) + [0])
+    tx = np.transpose(x, list(range(x.ndim))[1:] + [0])
     dims = np.shape(tx)
 
     # Container list for intervals
