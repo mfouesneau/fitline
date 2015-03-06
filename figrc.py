@@ -4,7 +4,7 @@ import os
 import sys
 sys.path.append(os.getenv('HOME') + '/bin/python/libs')
 # just in case notebook was not launched with the option
-#%pylab inline
+# %pylab inline
 
 import pylab as plt
 import numpy as np
@@ -12,16 +12,40 @@ from scipy import sparse
 from matplotlib.mlab import griddata
 from matplotlib.ticker import MaxNLocator
 from matplotlib.patches import Ellipse
+from scipy.sparse import coo_matrix
+from scipy.signal import convolve2d, convolve, gaussian
+from copy import deepcopy
+import re
 
 try:
     import faststats
 except:
     faststats = None
 
+# ==============================================================================
+# Python 3 compatibility behavior
+# ==============================================================================
+# remap some python 2 built-ins on to py3k behavior or equivalent
+# Most of them become generators
+import operator
 
-#===============================================================================
-#============== FIGURE SETUP FUNCTIONS =========================================
-#===============================================================================
+PY3 = sys.version_info[0] > 2
+
+if PY3:
+    iteritems = operator.methodcaller('items')
+    itervalues = operator.methodcaller('values')
+    basestring = (str, bytes)
+else:
+    range = xrange
+    from itertools import izip as zip
+    iteritems = operator.methodcaller('iteritems')
+    itervalues = operator.methodcaller('itervalues')
+    basestring = (str, unicode)
+
+
+# ==============================================================================
+# ============= FIGURE SETUP FUNCTIONS =========================================
+# ==============================================================================
 def theme(ax=None, minorticks=False):
     """ update plot to make it nice and uniform """
     from matplotlib.ticker import AutoMinorLocator
@@ -164,12 +188,12 @@ def devectorize_axes(ax=None, dpi=None, transparent=True):
 def hist_with_err(x, xerr, bins=None, normed=False, step=False, *kwargs):
     from scipy import integrate
 
-    #check inputs
+    # check inputs
     assert( len(x) == len(xerr) ), 'data size mismatch'
     _x = np.asarray(x).astype(float)
     _xerr = np.asarray(xerr).astype(float)
 
-    #def the evaluation points
+    # def the evaluation points
     if (bins is None) | (not hasattr(bins, '__iter__')):
         m = (_x - _xerr).min()
         M = (_x + _xerr).max()
@@ -317,9 +341,9 @@ def latex_float(f, precision=0.2, delimiter=r'\times'):
         return float_str
 
 
-#===============================================================================
-#===============================================================================
-#===============================================================================
+# ==============================================================================
+# ==============================================================================
+# ==============================================================================
 
 def ezrc(fontSize=22., lineWidth=2., labelSize=None, tickmajorsize=10,
          tickminorsize=5, figsize=(8, 6)):
@@ -337,9 +361,6 @@ def ezrc(fontSize=22., lineWidth=2., labelSize=None, tickmajorsize=10,
     rcParams['font.family'] = ['Times New Roman']
     rc('font', size=fontSize, family='serif', weight='bold')
     rc('axes', linewidth=lineWidth, labelsize=labelSize)
-    #rc('xtick', width=2.)
-    #rc('ytick', width=2.)
-    #rc('legend', fontsize='x-small', borderpad=0.1, markerscale=1.,
     rc('legend', borderpad=0.1, markerscale=1., fancybox=False)
     rc('text', usetex=True)
     rc('image', aspect='auto')
@@ -348,7 +369,6 @@ def ezrc(fontSize=22., lineWidth=2., labelSize=None, tickmajorsize=10,
     rcParams['xtick.minor.size'] = tickminorsize
     rcParams['ytick.major.size'] = tickmajorsize
     rcParams['ytick.minor.size'] = tickminorsize
-    #rcParams['text.latex.preamble'] = r'\usepackage{pslatex}'
     rcParams['text.latex.preamble'] = ["\\usepackage{amsmath}"]
 
 
@@ -373,11 +393,6 @@ def hide_axis(where, ax=None):
         ax.yaxis.set_ticks_position('right')
     elif 'right' in _w:
         ax.yaxis.set_ticks_position('left')
-
-    if ('top' in where) and ('bottom' in where):
-        plt.setp(ax.get_xticklabels(), visible=False)
-    if ('left' in where) and ('right' in where):
-        plt.setp(ax.get_yticklabels(), visible=False)
 
     plt.draw_if_interactive()
 
@@ -512,7 +527,7 @@ def crazy_histogram2d(x, y, bins=10, weights=None, reduce_w=None, NULL=None, rei
     except TypeError:
         nx = ny = bins
 
-    #values you want to be reported
+    # values you want to be reported
     if weights is None:
         weights = np.ones(x.size)
 
@@ -542,7 +557,7 @@ def crazy_histogram2d(x, y, bins=10, weights=None, reduce_w=None, NULL=None, rei
     xyi /= [dx, dy]
     xyi = np.floor(xyi, xyi).T
 
-    #xyi contains the bins of each point as a 2d array [(xi,yi)]
+    # xyi contains the bins of each point as a 2d array [(xi,yi)]
 
     d = {}
     for e, k in enumerate(xyi.T):
@@ -560,9 +575,9 @@ def crazy_histogram2d(x, y, bins=10, weights=None, reduce_w=None, NULL=None, rei
     _grid = sparse.coo_matrix((_w, _xyi), shape=(nx, ny))
 
     if reinterp is None:
-        #convert sparse to array with filled value
-        ## grid.toarray() does not account for filled value
-        ## sparse.coo.coo_todense() does actually add the values to the existing ones, i.e. not what we want -> brute force
+        # convert sparse to array with filled value
+        #  grid.toarray() does not account for filled value
+        #  sparse.coo.coo_todense() does actually add the values to the existing ones, i.e. not what we want -> brute force
         if NULL is None:
             B = _grid.toarray()
         else:  # Brute force only went needed
@@ -687,9 +702,9 @@ def bayesian_blocks(t):
     best = np.zeros(N, dtype=float)
     last = np.zeros(N, dtype=int)
 
-    #-----------------------------------------------------------------
+    # -----------------------------------------------------------------
     # Start with first data cell; add one cell at each iteration
-    #-----------------------------------------------------------------
+    # -----------------------------------------------------------------
     for K in range(N):
         # Compute the width and count of the final bin for all possible
         # locations of the K^th changepoint
@@ -706,9 +721,9 @@ def bayesian_blocks(t):
         last[K] = i_max
         best[K] = fit_vec[i_max]
 
-    #-----------------------------------------------------------------
+    # -----------------------------------------------------------------
     # Recover changepoints by iteratively peeling off the last block
-    #-----------------------------------------------------------------
+    # -----------------------------------------------------------------
     change_points = np.zeros(N, dtype=int)
     i_cp = N
     ind = N
@@ -850,7 +865,7 @@ def plotMAP(x, ax=None, error=0.01, frac=[0.65,0.95, 0.975], usehpd=True,
     else:
         n, b, p = ax.hist(_x, *args, **hist)
     c = 0.5 * (b[:-1] + b[1:])
-    #dc = 0.5 * (b[:-1] - b[1:])
+    # dc = 0.5 * (b[:-1] - b[1:])
     ind = n.argmax()
     _ylim = ax.get_ylim()
     if usehpd is True:
@@ -939,16 +954,564 @@ def getPercentileLevels(h, frac=[0.5, 0.65, 0.95, 0.975]):
     val = h.ravel()
     # inplace sort
     val.sort()
-    #reverse order
+    # reverse order
     rval = val[::-1]
-    #cumulative values
+    # cumulative values
     cval = rval.cumsum()
     cval = (cval - cval[0]) / (cval[-1] - cval[0])
-    #retrieve the largest indice up to the fraction of the sample we want
+    # retrieve the largest indice up to the fraction of the sample we want
     ind = np.where(cval <= cval[-1] * float(frac))[0].max()
     res = rval[ind]
     del val, cval, ind, rval
     return res
+
+
+def fastkde(x, y, gridsize=(200, 200), extents=None, nocorrelation=False,
+            weights=None, adjust=1.):
+    """
+    A fft-based Gaussian kernel density estimate (KDE)
+    for computing the KDE on a regular grid
+
+    Note that this is a different use case than scipy's original
+    scipy.stats.kde.gaussian_kde
+
+    IMPLEMENTATION
+    --------------
+
+    Performs a gaussian kernel density estimate over a regular grid using a
+    convolution of the gaussian kernel with a 2D histogram of the data.
+
+    It computes the sparse bi-dimensional histogram of two data samples where
+    *x*, and *y* are 1-D sequences of the same length. If *weights* is None
+    (default), this is a histogram of the number of occurences of the
+    observations at (x[i], y[i]).
+    histogram of the data is a faster implementation than numpy.histogram as it
+    avoids intermediate copies and excessive memory usage!
+
+
+    This function is typically *several orders of magnitude faster* than
+    scipy.stats.kde.gaussian_kde.  For large (>1e7) numbers of points, it
+    produces an essentially identical result.
+
+    Boundary conditions on the data is corrected by using a symmetric /
+    reflection condition. Hence the limits of the dataset does not affect the
+    pdf estimate.
+
+    Parameters
+    ----------
+
+        x, y:  ndarray[ndim=1]
+            The x-coords, y-coords of the input data points respectively
+
+        gridsize: tuple
+            A (nx,ny) tuple of the size of the output grid (default: 200x200)
+
+        extents: (xmin, xmax, ymin, ymax) tuple
+            tuple of the extents of output grid (default: extent of input data)
+
+        nocorrelation: bool
+            If True, the correlation between the x and y coords will be ignored
+            when preforming the KDE. (default: False)
+
+        weights: ndarray[ndim=1]
+            An array of the same shape as x & y that weights each sample (x_i,
+            y_i) by each value in weights (w_i).  Defaults to an array of ones
+            the same size as x & y. (default: None)
+
+        adjust : float
+            An adjustment factor for the bw. Bandwidth becomes bw * adjust.
+
+    Returns
+    -------
+        g: ndarray[ndim=2]
+            A gridded 2D kernel density estimate of the input points.
+
+        e: (xmin, xmax, ymin, ymax) tuple
+            Extents of g
+
+    """
+    # Variable check
+    x, y = np.asarray(x), np.asarray(y)
+    x, y = np.squeeze(x), np.squeeze(y)
+
+    if x.size != y.size:
+        raise ValueError('Input x & y arrays must be the same size!')
+
+    n = x.size
+
+    if weights is None:
+        # Default: Weight all points equally
+        weights = np.ones(n)
+    else:
+        weights = np.squeeze(np.asarray(weights))
+        if weights.size != x.size:
+            raise ValueError('Input weights must be an array of the same size as input x & y arrays!')
+
+    # Optimize gridsize ------------------------------------------------------
+    # Make grid and discretize the data and round it to the next power of 2
+    # to optimize with the fft usage
+    if gridsize is None:
+        gridsize = np.asarray([np.max((len(x), 512.)), np.max((len(y), 512.))])
+    gridsize = 2 ** np.ceil(np.log2(gridsize))  # round to next power of 2
+
+    nx, ny = gridsize
+
+    # Make the sparse 2d-histogram -------------------------------------------
+    # Default extents are the extent of the data
+    if extents is None:
+        xmin, xmax = x.min(), x.max()
+        ymin, ymax = y.min(), y.max()
+    else:
+        xmin, xmax, ymin, ymax = map(float, extents)
+    dx = (xmax - xmin) / (nx - 1)
+    dy = (ymax - ymin) / (ny - 1)
+
+    # Basically, this is just doing what np.digitize does with one less copy
+    # xyi contains the bins of each point as a 2d array [(xi,yi)]
+    xyi = np.vstack((x,y)).T
+    xyi -= [xmin, ymin]
+    xyi /= [dx, dy]
+    xyi = np.floor(xyi, xyi).T
+
+    # Next, make a 2D histogram of x & y.
+    # Exploit a sparse coo_matrix avoiding np.histogram2d due to excessive
+    # memory usage with many points
+    grid = coo_matrix((weights, xyi), shape=(nx, ny)).toarray()
+
+    # Kernel Preliminary Calculations ---------------------------------------
+    # Calculate the covariance matrix (in pixel coords)
+    cov = np.cov(xyi)
+
+    if nocorrelation:
+        cov[1,0] = 0
+        cov[0,1] = 0
+
+    # Scaling factor for bandwidth
+    scotts_factor = n ** (-1.0 / 6.) * adjust  # For 2D
+
+    # Make the gaussian kernel ---------------------------------------------
+
+    # First, determine the bandwidth using Scott's rule
+    # (note that Silvermann's rule gives the # same value for 2d datasets)
+    std_devs = np.sqrt(np.diag(cov))
+    kern_nx, kern_ny = np.round(scotts_factor * 2 * np.pi * std_devs)
+
+    # Determine the bandwidth to use for the gaussian kernel
+    inv_cov = np.linalg.inv(cov * scotts_factor ** 2)
+
+    # x & y (pixel) coords of the kernel grid, with <x,y> = <0,0> in center
+    xx = np.arange(kern_nx, dtype=np.float) - kern_nx / 2.0
+    yy = np.arange(kern_ny, dtype=np.float) - kern_ny / 2.0
+    xx, yy = np.meshgrid(xx, yy)
+
+    # Then evaluate the gaussian function on the kernel grid
+    kernel = np.vstack((xx.flatten(), yy.flatten()))
+    kernel = np.dot(inv_cov, kernel) * kernel
+    kernel = np.sum(kernel, axis=0) / 2.0
+    kernel = np.exp(-kernel)
+    kernel = kernel.reshape((kern_ny, kern_nx))
+
+    # Convolve the histogram with the gaussian kernel
+    # use boundary=symm to correct for data boundaries in the kde
+    grid = convolve2d(grid, kernel, mode='same', boundary='symm')
+
+    # Normalization factor to divide result by so that units are in the same
+    # units as scipy.stats.kde.gaussian_kde's output.
+    norm_factor = 2 * np.pi * cov * scotts_factor ** 2
+    norm_factor = np.linalg.det(norm_factor)
+    norm_factor = n * dx * dy * np.sqrt(norm_factor)
+
+    # Normalize the result
+    grid /= norm_factor
+
+    # print('KDE kernel sizes:', kern_nx * dx, kern_ny * dy)
+
+    return grid, (xmin, xmax, ymin, ymax), dx, dy
+
+
+class KDE_2d(object):
+    def __init__(self, x, y, gridsize=(100, 100), extents=None,
+                 nocorrelation=False, weights=None, adjust=0.5):
+
+        im, e, dx, dy = fastkde(x, y, gridsize=gridsize, extents=extents,
+                                nocorrelation=nocorrelation, weights=weights,
+                                adjust=adjust)
+        self.x = x
+        self.y = y
+        self.im = im
+        self.e = e
+        self.dx = dx
+        self.dy = dy
+
+    @property
+    def peak(self):
+        im = self.im
+        e = self.e
+        dx = self.dx
+        dy = self.dy
+        best_idx = (im.argmax() / im.shape[1], im.argmax() % im.shape[1])
+        best = (best_idx[0] * dx + e[0], best_idx[1] * dy + e[2])
+        return best
+
+    def nice_levels(self, N=5):
+        """ Generates N sigma levels from a image map
+
+        Parameters
+        ----------
+
+        H: ndarray
+            values to find levels from
+
+        N: int
+            number of sigma levels to find
+
+        Returns
+        -------
+        lvls: sequence
+            Levels corresponding to 1..(N + 1) sigma levels
+        """
+        V = 1.0 - np.exp(-0.5 * np.arange(0.5, 0.5 * (N + 1 + 0.1), 0.5) ** 2)
+        Hflat = self.im.flatten()
+        inds = np.argsort(Hflat)[::-1]
+        Hflat = Hflat[inds]
+        sm = np.cumsum(Hflat)
+        sm /= sm[-1]
+
+        for i, v0 in enumerate(V):
+            try:
+                V[i] = Hflat[sm <= v0][-1]
+            except:
+                V[i] = Hflat[0]
+        return V
+
+    def percentiles_lvl(self, frac):
+        return getPercentileLevels(self.im, frac=frac)
+
+    def imshow(self, **kwargs):
+        defaults = {'origin': 'lower', 'cmap': plt.cm.Greys,
+                    'interpolation':'nearest'}
+        defaults.update(**kwargs)
+        ax = kwargs.pop('ax', plt.gca())
+        return ax.imshow(self.im.T, extent=self.e, **defaults)
+
+    def contour(self, *args, **kwargs):
+        defaults = {'origin': 'lower', 'cmap': plt.cm.Greys,
+                    'levels': self.nice_levels()}
+        defaults.update(**kwargs)
+        ax = kwargs.pop('ax', plt.gca())
+        return ax.contour(self.im.T, *args, extent=self.e, **defaults)
+
+    def contourf(self, *args, **kwargs):
+        defaults = {'origin': 'lower', 'cmap': plt.cm.Greys,
+                    'levels': self.nice_levels()}
+        defaults.update(**kwargs)
+        ax = kwargs.pop('ax', plt.gca())
+        return ax.contourf(self.im.T, *args,  extent=self.e, **defaults)
+
+    def scatter(self, lvl=None, **kwargs):
+        defaults = {'c': '0.0', 'color':'k', 'facecolor':'k', 'edgecolor':'None'}
+        defaults.update(**kwargs)
+
+        xe = self.e[0] + self.dx * np.arange(0, self.im.shape[1])
+        ye = self.e[2] + self.dy * np.arange(0, self.im.shape[0])
+        x = self.x
+        y = self.y
+
+        if lvl is not None:
+            nx = np.ceil(np.interp(x, 0.5 * (xe[:-1] + xe[1:]), range(len(xe) - 1)))
+            ny = np.ceil(np.interp(y, 0.5 * (ye[:-1] + ye[1:]), range(len(ye) - 1)))
+            nh = [ self.im[nx[k], ny[k]] for k in range(len(x)) ]
+            ind = np.where(nh < np.min(lvl))
+            plt.scatter(x[ind], y[ind], **kwargs)
+        else:
+            plt.scatter(x, y, **kwargs)
+
+    def plot(self, contour={}, scatter={}, **kwargs):
+        # levels = np.linspace(self.im.min(), self.im.max(), 10)[1:]
+        levels = self.nice_levels()
+        c_defaults = {'origin': 'lower', 'cmap': plt.cm.Greys_r, 'levels':
+                      levels}
+        c_defaults.update(**contour)
+
+        c = self.contourf(**c_defaults)
+
+        lvls = np.sort(c.levels)
+        s_defaults = {'c': '0.0', 'edgecolor':'None', 's':2}
+        s_defaults.update(**scatter)
+
+        self.scatter(lvl=[lvls], **s_defaults)
+
+
+def plot_kde2d(x, y, gridsize=(100, 100), extents=None, nocorrelation=False,
+               weights=None, adjust=0.3, **kwargs):
+
+    kde = KDE_2d(x, y, gridsize=gridsize, extents=extents,
+                 nocorrelation=nocorrelation, weights=weights, adjust=adjust)
+
+    kde.plot(**kwargs)
+
+
+def fastkde1D(xin, gridsize=200, extents=None, weights=None, adjust=1.):
+    """
+    A fft-based Gaussian kernel density estimate (KDE)
+    for computing the KDE on a regular grid
+
+    Note that this is a different use case than scipy's original
+    scipy.stats.kde.gaussian_kde
+
+    IMPLEMENTATION
+    --------------
+
+    Performs a gaussian kernel density estimate over a regular grid using a
+    convolution of the gaussian kernel with a 2D histogram of the data.
+
+    It computes the sparse bi-dimensional histogram of two data samples where
+    *x*, and *y* are 1-D sequences of the same length. If *weights* is None
+    (default), this is a histogram of the number of occurences of the
+    observations at (x[i], y[i]).
+    histogram of the data is a faster implementation than numpy.histogram as it
+    avoids intermediate copies and excessive memory usage!
+
+
+    This function is typically *several orders of magnitude faster* than
+    scipy.stats.kde.gaussian_kde.  For large (>1e7) numbers of points, it
+    produces an essentially identical result.
+
+    **Example usage and timing**
+
+        from scipy.stats import gaussian_kde
+
+        def npkde(x, xe):
+            kde = gaussian_kde(x)
+            r = kde.evaluate(xe)
+            return r
+        x = np.random.normal(0, 1, 1e6)
+
+        %timeit fastkde1D(x)
+        10 loops, best of 3: 31.9 ms per loop
+
+        %timeit npkde(x, xe)
+        1 loops, best of 3: 11.8 s per loop
+
+        ~ 1e4 speed up!!! However gaussian_kde is not optimized for this application
+
+    Boundary conditions on the data is corrected by using a symmetric /
+    reflection condition. Hence the limits of the dataset does not affect the
+    pdf estimate.
+
+    INPUTS
+    ------
+
+        xin:  ndarray[ndim=1]
+            The x-coords, y-coords of the input data points respectively
+
+        gridsize: int
+            A nx integer of the size of the output grid (default: 200x200)
+
+        extents: (xmin, xmax) tuple
+            tuple of the extents of output grid (default: extent of input data)
+
+        weights: ndarray[ndim=1]
+            An array of the same shape as x that weights each sample x_i
+            by w_i.  Defaults to an array of ones the same size as x (default: None)
+
+        adjust : float
+            An adjustment factor for the bw. Bandwidth becomes bw * adjust.
+
+    OUTPUTS
+    -------
+        g: ndarray[ndim=2]
+            A gridded 2D kernel density estimate of the input points.
+
+        e: (xmin, xmax, ymin, ymax) tuple
+            Extents of g
+
+    """
+    # Variable check
+    x = np.squeeze(np.asarray(xin))
+
+    # Default extents are the extent of the data
+    if extents is None:
+        xmin, xmax = x.min(), x.max()
+    else:
+        xmin, xmax = map(float, extents)
+        x = x[ (x <= xmax) & (x >= xmin) ]
+
+    n = x.size
+
+    if weights is None:
+        # Default: Weight all points equally
+        weights = np.ones(n)
+    else:
+        weights = np.squeeze(np.asarray(weights))
+        if weights.size != x.size:
+            raise ValueError('Input weights must be an array of the same size as input x & y arrays!')
+
+    # Optimize gridsize ------------------------------------------------------
+    # Make grid and discretize the data and round it to the next power of 2
+    # to optimize with the fft usage
+    if gridsize is None:
+        gridsize = np.max((len(x), 512.))
+    gridsize = 2 ** np.ceil(np.log2(gridsize))  # round to next power of 2
+
+    nx = gridsize
+
+    # Make the sparse 2d-histogram -------------------------------------------
+    dx = (xmax - xmin) / (nx - 1)
+
+    # Basically, this is just doing what np.digitize does with one less copy
+    # xyi contains the bins of each point as a 2d array [(xi,yi)]
+    xyi = x - xmin
+    xyi /= dx
+    xyi = np.floor(xyi, xyi)
+    xyi = np.vstack((xyi, np.zeros(n, dtype=int)))
+
+    # Next, make a 2D histogram of x & y.
+    # Exploit a sparse coo_matrix avoiding np.histogram2d due to excessive
+    # memory usage with many points
+    grid = coo_matrix((weights, xyi), shape=(nx, 1)).toarray()
+
+    # Kernel Preliminary Calculations ---------------------------------------
+    std_x = np.std(xyi[0])
+
+    # Scaling factor for bandwidth
+    scotts_factor = n ** (-1. / 5.) * adjust  # For n ** (-1. / (d + 4))
+
+    # Silvermann n * (d + 2) / 4.)**(-1. / (d + 4)).
+
+    # Make the gaussian kernel ---------------------------------------------
+
+    # First, determine the bandwidth using Scott's rule
+    # (note that Silvermann's rule gives the # same value for 2d datasets)
+    kern_nx = np.round(scotts_factor * 2 * np.pi * std_x)
+
+    # Then evaluate the gaussian function on the kernel grid
+    kernel = np.reshape(gaussian(kern_nx, scotts_factor * std_x), (kern_nx, 1))
+
+    # ---- Produce the kernel density estimate --------------------------------
+
+    # Convolve the histogram with the gaussian kernel
+    # use symmetric padding to correct for data boundaries in the kde
+    npad = np.min((nx, 2 * kern_nx))
+    grid = np.vstack( [grid[npad: 0: -1], grid, grid[nx: nx - npad: -1]] )
+    grid = convolve(grid, kernel, mode='same')[npad: npad + nx]
+
+    # Normalization factor to divide result by so that units are in the same
+    # units as scipy.stats.kde.gaussian_kde's output.
+    norm_factor = 2 * np.pi * std_x * std_x * scotts_factor ** 2
+    norm_factor = n * dx * np.sqrt(norm_factor)
+
+    # Normalize the result
+    grid /= norm_factor
+
+    return np.squeeze(grid), (xmin, xmax), dx
+
+
+class KDE_1d(object):
+    def __init__(self,x, gridsize=200, extents=None, weights=None, adjust=1.):
+
+        im, e, dx = fastkde1D(x,gridsize=gridsize, extents=extents,
+                              weights=weights, adjust=adjust)
+        self.x = x
+        self.dx = dx
+        self.im = im
+        self.e = e
+
+    @property
+    def peak(self):
+        im = self.im
+        e = self.e
+        dx = self.dx
+        best = im.argmax() * dx + e[0]
+        return best
+
+    def add_markers(self, ax=None, where=0.0, orientation='horizontal',
+                    jitter=0, **kwargs):
+
+        if ax is None:
+            ax = plt.gca()
+
+        # draw the positions
+        if 'marker' not in kwargs:
+            if orientation == 'horizontal':
+                kwargs['marker'] = '|'
+            else:
+                kwargs['marker'] = '_'
+
+        if ('facecolor' not in kwargs.keys()) | ('fc' not in kwargs.keys()) | \
+           ('markerfacecolor' not in kwargs.keys()) | ('mfc' not in kwargs.keys()):
+            kwargs['markerfacecolor'] = 'None'
+        if ('edgecolor' not in kwargs.keys()) | ('ec' not in kwargs.keys()) | \
+           ('markeredgecolor' not in kwargs.keys()) | ('mec' not in kwargs.keys()):
+            kwargs['markeredgecolor'] = 'k'
+        if ('linestyle' not in kwargs.keys()) | ('ls' not in kwargs.keys()):
+            kwargs['linestyle'] = 'None'
+        if ('size' not in kwargs.keys()) | ('markersize' not in kwargs.keys()):
+            kwargs['markersize'] = 3
+
+        if orientation == 'horizontal':
+            # Draw the lines
+            if jitter > 0:
+                pos = np.random.uniform(low=float(where - jitter),
+                                        high=float(where + jitter),
+                                        size=len(self.x))
+                ax.plot(self.x, pos, **kwargs)
+            else:
+                ax.plot(self.x, float(where) * np.ones(len(self.x)), **kwargs)
+
+            plt.draw_if_interactive()
+
+        elif orientation == 'vertical':
+            # Draw the lines
+            if jitter > 0.:
+                pos = np.random.uniform(low=float(where - jitter),
+                                        high=float(where + jitter),
+                                        size=len(self.x))
+                ax.plot(pos, self.x, **kwargs)
+            else:
+                ax.plot(float(where) * np.ones(len(self.x)), self.x, marker='_',
+                        **kwargs)
+
+        plt.draw_if_interactive()
+
+    def plot(self, ax=None, orientation='horizontal', cutoff=False, log=False,
+             cutoff_type='std', cutoff_val=1.5, pos=100, pos_marker='line',
+             pos_width=0.05, pos_kwargs={}, **kwargs):
+
+        if ax is None:
+            ax = plt.gca()
+
+        # Draw the violin.
+        if ('facecolor' not in kwargs) | ('fc' not in kwargs):
+            kwargs['facecolor'] = 'y'
+        if ('edgecolor' not in kwargs) | ('ec' not in kwargs):
+            kwargs['edgecolor'] = 'k'
+        if ('alpha' not in kwargs.keys()):
+            kwargs['alpha'] = 0.5
+
+        if 'color' in kwargs:
+            kwargs['edgecolor'] = kwargs['color']
+            kwargs['facecolor'] = kwargs['color']
+
+        # Kernel density estimate for data at this position.
+        violin, e = self.im, self.e
+        xvals = np.linspace(e[0], e[1], len(violin))
+
+        xvals = np.hstack(([xvals[0]], xvals, [xvals[-1]]))
+        violin = np.hstack(([0], violin, [0]))
+
+        if orientation == 'horizontal':
+            ax.fill(xvals, violin, **kwargs)
+        elif orientation == 'vertical':
+            ax.fill_betweenx(xvals, 0, violin, **kwargs)
+
+        plt.draw_if_interactive()
+
+
+def plot_kde1d(x, gridsize=200, extents=None, weights=None, adjust=1.,
+               **kwargs):
+    return KDE_1d(x, gridsize=gridsize, extents=extents, weights=weights,
+                  adjust=adjust).plot(**kwargs)
 
 
 def plotDensity(x,y, bins=100, ax=None, Nlevels=None, levels=None,
@@ -1049,35 +1612,34 @@ def make_indices(dimensions):
         return indices
 
 
-def hpd(x, alpha, copy=True):
+def hpd(x, alpha):
     """Calculate HPD (minimum width BCI) of array for given alpha"""
 
-    if hasattr(alpha, '__iter__'):
-        return np.array([ hpd(x, ak, copy=copy) for ak in alpha ])
-
     # Make a copy of trace
-    if copy is True:
-        x = x.copy()
+    x = x.copy()
 
-    # Transpose first, then sort
-    tx = np.transpose(x, list(range(x.ndim)[1:]) + [0])
-    dims = np.shape(tx)
+    # For multivariate node
+    if x.ndim > 1:
 
-    # Container list for intervals
-    intervals = np.resize(0.0, dims[:-1] + (2,))
+        # Transpose first, then sort
+        tx = np.transpose(x, range(x.ndim)[1:] + [0])
+        dims = np.shape(tx)
 
-    for index in make_indices(dims[:-1]):
+        # Container list for intervals
+        intervals = np.resize(0.0, dims[:-1] + (2,))
 
-        try:
-            index = tuple(index)
-        except TypeError:
-            pass
+        for index in make_indices(dims[:-1]):
 
-        # Sort trace
-        sx = np.sort(tx[index])
+            try:
+                index = tuple(index)
+            except TypeError:
+                pass
 
-        # Append to list
-        intervals[index] = calc_min_interval(sx, alpha)
+            # Sort trace
+            sx = np.sort(tx[index])
+
+            # Append to list
+            intervals[index] = calc_min_interval(sx, alpha)
 
         # Transpose back before returning
         return np.array(intervals)
@@ -1165,7 +1727,6 @@ def plotCorr(l, pars, plotfunc=None, lbls=None, limits=None, triangle='lower',
 
                             xlim = limits.get(pars[i], (data.min(), data.max()))
                             ax.set_xlim(xlim)
-                            #ax.set_ylim(0, n.max() * 1.1)
 
                         if triangle == 'upper':
                             data_x = l[pars[i]]
@@ -1359,3 +1920,903 @@ def parallel_coordinates(d, labels=None, orientation='horizontal',
         ax.set_yticks(positions)
         ax.set_yticklabels(names)
         ax.set_ylim(positions.min() - 0.1 * dyn, positions.max() + 0.1 * dyn)
+
+
+def raw_string(seq):
+    """ make a sequence of strings raw to avoid latex interpretation """
+
+    def f(s):
+        """ Filter latex """
+        r = s.replace('\\', '\\\\').replace('_', '\_').replace('^', '\^')
+        return r
+
+    return [ f(k) for k in seq ]
+
+
+def get_centers_from_bins(bins):
+    """ return centers from bin sequence """
+    return 0.5 * (bins[:-1] + bins[1:])
+
+
+def nice_levels(H, N=5):
+    """ Generates N sigma levels from a image map
+
+    Parameters
+    ----------
+
+    H: ndarray
+        values to find levels from
+
+    N: int
+        number of sigma levels to find
+
+    Returns
+    -------
+    lvls: sequence
+        Levels corresponding to 1..(N + 1) sigma levels
+    """
+    V = 1.0 - np.exp(-0.5 * np.arange(0.5, 0.5 * (N + 1 + 0.1), 0.5) ** 2)
+    Hflat = H.flatten()
+    inds = np.argsort(Hflat)[::-1]
+    Hflat = Hflat[inds]
+    sm = np.cumsum(Hflat)
+    sm /= sm[-1]
+
+    for i, v0 in enumerate(V):
+        try:
+            V[i] = Hflat[sm <= v0][-1]
+        except:
+            V[i] = Hflat[0]
+    return V
+
+
+def plot_density_map(x, y, xbins, ybins, Nlevels=4, cbar=True):
+
+    Z = np.histogram2d(x, y, bins=(xbins, ybins))[0].astype(float).T
+
+    # central values
+    lt = get_centers_from_bins(xbins)
+    lm = get_centers_from_bins(ybins)
+    cX, cY = np.meshgrid(lt, lm)
+    X, Y = np.meshgrid(xbins, ybins)
+
+    im = plt.pcolor(X, Y, Z, cmap=plt.cm.Blues)
+    plt.contour(cX, cY, Z, levels=nice_levels(Z, Nlevels), cmap=plt.cm.Greys_r)
+
+    if cbar:
+        cb = plt.colorbar(im)
+    else:
+        cb = None
+    plt.xlim(xbins[0], xbins[-1])
+    plt.ylim(ybins[0], ybins[-1])
+
+    plt.tight_layout()
+    return plt.gca(), cb
+
+
+def triangle_plot(d, keys, bins=None, **kwargs):
+
+    """
+    Plot density maps all elements of gx against all elements of gy
+
+    Parameters
+    ----------
+    d: dictionnary like structure
+        data structure
+
+    keys: sequence(str)
+        keys from d to plot
+
+    bins: sequence, optional
+        bins to use per dimension
+        default is adapted from the stddev
+
+    labels: sequence(str)
+        string to use as labels on the plots
+
+    usekde: bool, optional, default: true
+        if set use KDE to estimate densities, histograms otherwise
+
+    tickrotation: float, optional, default: 0
+        rotate the tick labels on the x-axis
+
+    gaussian_ellipse: bool, optional, default: True
+        if set, display the Gaussian error ellipse on top of each plot
+
+    hpd: bool, optional, default: True
+        if set display 1 and 3 sigma equivalent range on the 1d pdfs
+
+    returns
+    -------
+    axes: sequence
+        all axes defined in the plot
+
+    .. note::
+
+        Other parameters are forwarded to :func:`plot_density_map`
+        1d pdfs calls :func:`plot_1d_PDFs`
+
+    """
+    _drop = []
+    ncols = len(keys)
+    nlines = len(keys)
+    shape = (nlines, ncols)
+    axes = np.empty((nlines, ncols), dtype=object)
+    lbls = kwargs.pop('labels', keys)
+    usekde = kwargs.pop('usekde', True)
+    ticksrotation = kwargs.pop('ticksrotation', 0)
+    # gaussian_corner = kwargs.pop('gaussian_corner', False)
+    gaussian_ellipse = kwargs.pop('gaussian_ellipse', False)
+    hpd = kwargs.pop('hpd', True)
+
+    if bins is None:
+        bins = []
+        for k in keys:
+            x = d[k]
+            dx = 0.1 * np.std(x)
+            bins.append(np.arange(x.min() - 2 * dx, x.max() + 2 * dx, dx))
+    else:
+        if not hasattr(bins, '__iter__'):
+            bins = [bins] * len(keys)
+
+    if len(bins) != len(keys):
+        raise AttributeError('bins are not the same length as dimensions')
+
+    if hpd is True:
+        _hpd = []
+        perc_values = (0.1, 15.7, 50, 84.3, 99.9)
+
+    for k in range(nlines * ncols):
+        yk, xk = np.unravel_index(k, shape)
+        kxk = keys[xk]
+        kyk = keys[yk]
+        if (xk > 0) and (yk > xk):
+            sharey = axes[yk, 0]
+        elif (xk > 1) and (yk < xk):
+            sharey = axes[yk, 0]
+        else:
+            sharey = None
+        if (yk > 0):
+            sharex = axes[yk - 1, xk]
+        else:
+            sharex = None
+
+        ax = plt.subplot(nlines, ncols, k+1, sharey=sharey, sharex=sharex)
+        if yk >= xk:
+            axes[yk, xk] = ax
+        # elif not gaussian_corner:
+        else:
+            _drop.append(ax)
+
+        if (yk > xk):
+            if usekde:
+                kde = KDE_2d(d[kxk], d[kyk],
+                             gridsize=(len(bins[xk]),len(bins[yk])),
+                             adjust=0.5,)
+                kde.imshow()
+                kde.contour(cmap=plt.cm.Greys_r)
+            else:
+                plot_density_map(d[kxk], d[kyk], bins[xk], bins[yk], cbar=False,
+                                 **kwargs)
+
+            if gaussian_ellipse:
+                data = np.vstack([d[kxk], d[kyk]])
+                mu = np.mean(data, axis=1)
+                cov = np.cov(data - mu[:, None])
+                error_ellipse(mu, cov, ax=ax, edgecolor="r", lw=2)
+            if xk == 0:
+                ax.set_ylabel(lbls[yk])
+            else:
+                plt.setp(ax.get_yticklabels(), visible=False)
+            if yk == nlines - 1:
+                ax.set_xlabel(lbls[xk])
+                [l.set_rotation(ticksrotation) for l in ax.get_xticklabels()]
+            else:
+                plt.setp(ax.get_xticklabels(), visible=False)
+        elif (yk == xk):
+            if usekde:
+                kde = KDE_1d(d[kxk], gridsize=len(bins[xk]))
+                kde.plot(ec='k', alpha=0.8, lw=2, fc='w', facecolor='w')
+                mode = kde.peak
+                plt.vlines(kde.peak, ymin=0, ymax=kde.im.max(), color='r')
+            else:
+                n, _ = np.histogram(d[kxk], bins=bins[xk])
+                xn = get_centers_from_bins(bins[xk])
+                ax.fill_between(xn, [0] * len(xn), n.astype(float), edgecolor='k',
+                                facecolor='w', alpha=0.8, lw=2)
+                mode = xn[n.argmax()]
+                plt.vlines([xn[n.argmax()]], ymin=0, ymax=n.max(), color='r', lw=1, zorder=10)
+
+            if hpd is True:
+                ylim = ax.get_ylim()
+                xn = np.percentile(d[kxk], perc_values)
+                plt.vlines(xn, ymin=0, ymax=ylim[1], color='b', zorder=-10)
+                plt.fill_between([xn[0], xn[2]], [0] * 2, [ylim[1]] * 2, color='b', alpha=0.05, zorder=-10)
+                plt.fill_between([xn[1], xn[2]], [0] * 2, [ylim[1]] * 2, color='b', alpha=0.1, zorder=-10)
+                plt.fill_between([xn[2], xn[-1]], [0] * 2, [ylim[1]] * 2, color='b', alpha=0.05, zorder=-10)
+                plt.fill_between([xn[2], xn[-2]], [0] * 2, [ylim[1]] * 2, color='b', alpha=0.1, zorder=-10)
+                ax.set_ylim(*ylim)
+                _hpd.append(xn.tolist() + [mode])
+
+            plt.setp(ax.get_yticklabels(), visible=False)
+            if yk == nlines - 1:
+                ax.set_xlabel(lbls[xk])
+                [l.set_rotation(ticksrotation) for l in ax.get_xticklabels()]
+            else:
+                plt.setp(ax.get_xticklabels(), visible=False)
+            plt.setp(ax.get_yticklines(), visible=False)
+            hide_axis(where=['top', 'left', 'right'], ax=ax)
+
+    plt.tight_layout()
+
+    for ax in _drop:
+        ax.set_visible(False)
+
+    plt.subplots_adjust(hspace=0.05, wspace=0.05)
+
+    if hpd is True:
+        lbls = ['p{0:d}'.format(int(pk + 0.5)) for pk in perc_values] + ['mode']
+        return (lbls, _hpd), [k for k in axes.ravel() if k is not None]
+    else:
+        return [k for k in axes.ravel() if k is not None]
+
+
+def plot_1d_PDFs(d, lbls, ticksrotation=45, hpd=True,
+                 figout=None, usekde=True, bins=None, **kwargs):
+    """
+    Parameters
+    ----------
+    d: dictionnary like structure
+        data structure
+
+    keys: sequence(str)
+        keys from d to plot
+
+    bins: sequence, optional
+        bins to use per dimension
+        default is adapted from the stddev
+
+    labels: sequence(str)
+        string to use as labels on the plots
+
+    usekde: bool, optional, default: true
+        if set use KDE to estimate densities, histograms otherwise
+
+    tickrotation: float, optional, default: 0
+        rotate the tick labels on the x-axis
+
+    hpd: bool, optional, default: True
+        if set display 1 and 3 sigma equivalent range on the 1d pdfs
+
+    returns
+    -------
+    axes: sequence
+        all axes defined in the plot
+    """
+
+    lbls = list(lbls)
+
+    if bins is None:
+        bins = []
+        for k in lbls:
+            x = d[k]
+            dx = 0.2 * np.std(x)
+            bins.append(np.arange(x.min() - 2 * dx, x.max() + 2 * dx, dx))
+    else:
+        if not hasattr(bins, '__iter__'):
+            bins = [bins] * len(lbls)
+
+    if len(bins) != len(lbls):
+        raise AttributeError('bins are not the same length as dimensions')
+
+    xlabels = kwargs.pop('labels', lbls)
+
+    ndim = len(lbls)
+    nlines = min(ndim // 4, 4)
+    plt.figure(figsize=((ndim // nlines + ndim % nlines) * 4,  4. * nlines ))
+
+    axes = []
+    for xk, kxk in enumerate(lbls):
+        ax = plt.subplot(nlines, ndim // nlines + ndim % nlines, xk + 1)
+        if usekde:
+            kde = KDE_1d(d[kxk], gridsize=len(bins[xk]))
+            kde.plot(ec='k', alpha=0.8, lw=2, fc='w', facecolor='w')
+            plt.vlines(kde.peak, ymin=0, ymax=kde.im.max(), color='r')
+        else:
+            n, _ = np.histogram(d[kxk], bins=bins[xk])
+            xn = get_centers_from_bins(bins[xk])
+            ax.fill_between(xn, [0] * len(xn), n.astype(float), edgecolor='k',
+                            facecolor='w', alpha=0.8, lw=2)
+            plt.vlines([xn[n.argmax()]], ymin=0, ymax=n.max(), color='r', lw=1, zorder=10)
+
+        if hpd is True:
+            ylim = ax.get_ylim()
+            xn = np.percentile(d[kxk], (0.1, 15.7, 50, 84.3, 99.9))
+            plt.vlines(xn, ymin=0, ymax=ylim[1], color='b', zorder=-10)
+            plt.fill_between([xn[0], xn[2]], [0] * 2, [ylim[1]] * 2, color='b', alpha=0.05, zorder=-10)
+            plt.fill_between([xn[1], xn[2]], [0] * 2, [ylim[1]] * 2, color='b', alpha=0.1, zorder=-10)
+            plt.fill_between([xn[2], xn[-1]], [0] * 2, [ylim[1]] * 2, color='b', alpha=0.05, zorder=-10)
+            plt.fill_between([xn[2], xn[-2]], [0] * 2, [ylim[1]] * 2, color='b', alpha=0.1, zorder=-10)
+            ax.set_ylim(*ylim)
+
+        plt.setp(ax.get_yticklabels(), visible=False)
+        [l.set_rotation(ticksrotation) for l in ax.get_xticklabels()]
+
+        hide_axis(where=['top', 'left', 'right'], ax=ax)
+        ax.set_xlabel(xlabels[xk])
+        ax.set_ylim(0, ax.get_ylim()[1])
+        axes.append(ax)
+
+    plt.tight_layout()
+    return axes
+
+# =============================================================================
+# Implementing THEMES in plt
+# =============================================================================
+
+
+class Theme(object):
+    """This is an abstract base class for themes.
+
+    In general, only complete themes should should subclass this class.
+
+
+    Notes
+    -----
+    When subclassing there are really only two methods that need to be
+    implemented.
+
+    __init__: This should call super().__init__ which will define
+    self._rcParams. Subclasses should customize self._rcParams after calling
+    super().__init__. That will ensure that the rcParams are applied at
+    the appropriate time.
+
+    The other method is apply_theme(ax). This method takes an axes object that
+    has been created during the plot process. The theme should modify the
+    axes according.
+
+    """
+
+    _allowed_keys = plt.rcParams.keys()
+
+    def __init__(self, *args, **kwargs):
+        """
+        Provide ggplot2 themeing capabilities.
+
+        Parameters
+        -----------
+        kwargs**: theme_element
+            kwargs are theme_elements based on http://docs.ggplot2.org/current/theme.html.
+            Currently only a subset of the elements are implemented. In addition,
+            Python does not allow using '.' in argument names, so we are using '_'
+            instead.
+
+            For example, ggplot2 axis.ticks.y will be  axis_ticks_y in Python ggplot.
+
+        """
+        self._rcParams = {}
+        self.update(*args, **kwargs)
+
+    def update(self, *args, **kwargs):
+        for k, v in dict(*args, **kwargs).items():
+            self.__setitem__(k, v)
+
+    def __setitem__(self, k, v):
+            if k in self._allowed_keys:
+                self._rcParams[k] = v
+
+    def keys(self, regexp=None, full_match=False):
+        """
+        Return the data column names or a subset of it
+
+        Parameters
+        ----------
+        regexp: str
+            pattern to filter the keys with
+
+        full_match: bool
+            if set, use :func:`re.fullmatch` instead of :func:`re.match`
+
+        Try to apply the pattern at the start of the string, returning
+        a match object, or None if no match was found.
+
+        returns
+        -------
+        seq: sequence
+            sequence of keys
+        """
+        keys = list(sorted(self._rcParams.keys()))
+
+        if (regexp is None) or (regexp == '*'):
+            return keys
+        elif type(regexp) in basestring:
+            if full_match is True:
+                fn = re.fullmatch
+            else:
+                fn = re.match
+
+            if regexp.count(',') > 0:
+                _re = regexp.split(',')
+            elif regexp.count(' ') > 0:
+                _re = regexp.split()
+            else:
+                _re = [regexp]
+
+            _keys = []
+            for _rk in _re:
+                _keys += [k for k in keys if (fn(_rk, k) is not None)]
+            return _keys
+        elif hasattr(regexp, '__iter__'):
+            _keys = []
+            for k in regexp:
+                _keys += self.keys(k)
+            return _keys
+        else:
+            raise ValueError('Unexpected type {0} for regexp'.format(type(regexp)))
+
+    def apply_theme(self, ax):
+        """apply_theme will be called with an axes object after plot has completed.
+
+        Complete themes should implement this method if post plot themeing is
+        required.
+
+        """
+        pass
+
+    def get_rcParams(self):
+        """Get an rcParams dict for this theme.
+
+        Notes
+        -----
+        Subclasses should not need to override this method method as long as
+        self._rcParams is constructed properly.
+
+        rcParams are used during plotting. Sometimes the same theme can be
+        achieved by setting rcParams before plotting or a post_plot_callback
+        after plotting. The choice of how to implement it is is a matter of
+        convenience in that case.
+
+        There are certain things can only be themed after plotting. There
+        may not be an rcParam to control the theme or the act of plotting
+        may cause an entity to come into existence before it can be themed.
+
+        """
+        rcParams = deepcopy(self._rcParams)
+        return rcParams
+
+    def __add__(self, other):
+        if isinstance(other, Theme):
+            theme = deepcopy(self)
+            theme.update(**other.get_rcParams())
+            return theme
+        else:
+            raise TypeError()
+
+    def post_callback(self, *args, **kwargs):
+        pass
+
+    def __enter__(self):
+        self._rcstate = deepcopy(plt.rcParams)
+        plt.rcParams.update(**self.get_rcParams())
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        self.post_callback()
+        plt.rcParams.update(self._rcstate)
+
+    def __call__(self, *args, **kwargs):
+        return self.post_callback(*args, **kwargs)
+
+
+class Theme_Seaborn(Theme):
+    """
+    Theme for seaborn.
+    Copied from mwaskom's seaborn:
+        https://github.com/mwaskom/seaborn/blob/master/seaborn/rcmod.py
+    Parameters
+    ----------
+    style: whitegrid | darkgrid | nogrid | ticks
+        Style of axis background.
+    context: notebook | talk | paper | poster
+        Intended context for resulting figures.
+    gridweight: extra heavy | heavy | medium | light
+        Width of the grid lines. None
+    """
+
+    def __init__(self, style="whitegrid", gridweight=None, context="notebook"):
+        super(self.__class__, self).__init__()
+        self.style = style
+        self.gridweight = gridweight
+        self.context = context
+        self._set_theme_seaborn_rcparams(self._rcParams, self.style,
+                                         self.gridweight, self.context)
+
+    def _set_theme_seaborn_rcparams(self, rcParams, style, gridweight, context):
+        """helper method to set the default rcParams and other theming relevant
+        things
+        """
+        # select grid line width:
+        gridweights = {'extra heavy': 1.5,
+                       'heavy': 1.1,
+                       'medium': 0.8,
+                       'light': 0.5, }
+        if gridweight is None:
+            if context == "paper":
+                glw = gridweights["medium"]
+            else:
+                glw = gridweights['extra heavy']
+        elif np.isreal(gridweight):
+            glw = gridweight
+        else:
+            glw = gridweights[gridweight]
+
+        if style == "darkgrid":
+            lw = .8 if context == "paper" else 1.5
+            ax_params = {"axes.facecolor": "#EAEAF2",
+                         "axes.edgecolor": "white",
+                         "axes.linewidth": 0,
+                         "axes.grid": True,
+                         "axes.axisbelow": True,
+                         "grid.color": "w",
+                         "grid.linestyle": "-",
+                         "grid.linewidth": glw}
+
+        elif style == "whitegrid":
+            lw = 1.0 if context == "paper" else 1.7
+            ax_params = {"axes.facecolor": "white",
+                         "axes.edgecolor": "#CCCCCC",
+                         "axes.linewidth": lw,
+                         "axes.grid": True,
+                         "axes.axisbelow": True,
+                         "grid.color": "#DDDDDD",
+                         "grid.linestyle": "-",
+                         "grid.linewidth": glw}
+
+        elif style == "nogrid":
+            ax_params = {"axes.grid": False,
+                         "axes.facecolor": "white",
+                         "axes.edgecolor": "black",
+                         "axes.linewidth": 1}
+
+        elif style == "ticks":
+            ticksize = 3. if context == "paper" else 6.
+            tickwidth = .5 if context == "paper" else 1
+            ax_params = {"axes.grid": False,
+                         "axes.facecolor": "white",
+                         "axes.edgecolor": "black",
+                         "axes.linewidth": 1,
+                         "xtick.direction": "out",
+                         "ytick.direction": "out",
+                         "xtick.major.width": tickwidth,
+                         "ytick.major.width": tickwidth,
+                         "xtick.minor.width": tickwidth,
+                         "xtick.minor.width": tickwidth,
+                         "xtick.major.size": ticksize,
+                         "xtick.minor.size": ticksize / 2,
+                         "ytick.major.size": ticksize,
+                         "ytick.minor.size": ticksize / 2}
+        else:
+            ax_params = {}
+
+        rcParams.update(ax_params)
+
+        # Determine the font sizes
+        if context == "talk":
+            font_params = {"axes.labelsize": 16,
+                           "axes.titlesize": 19,
+                           "xtick.labelsize": 14,
+                           "ytick.labelsize": 14,
+                           "legend.fontsize": 13,
+                           }
+
+        elif context == "notebook":
+            font_params = {"axes.labelsize": 11,
+                           "axes.titlesize": 12,
+                           "xtick.labelsize": 10,
+                           "ytick.labelsize": 10,
+                           "legend.fontsize": 10,
+                           }
+
+        elif context == "poster":
+            font_params = {"axes.labelsize": 18,
+                           "axes.titlesize": 22,
+                           "xtick.labelsize": 16,
+                           "ytick.labelsize": 16,
+                           "legend.fontsize": 16,
+                           }
+
+        elif context == "paper":
+            font_params = {"axes.labelsize": 8,
+                           "axes.titlesize": 12,
+                           "xtick.labelsize": 8,
+                           "ytick.labelsize": 8,
+                           "legend.fontsize": 8,
+                           }
+
+        rcParams.update(font_params)
+
+        # Set other parameters
+        rcParams.update({
+            "lines.linewidth": 1.1 if context == "paper" else 1.4,
+            "patch.linewidth": .1 if context == "paper" else .3,
+            "xtick.major.pad": 3.5 if context == "paper" else 7,
+            "ytick.major.pad": 3.5 if context == "paper" else 7,
+            })
+
+        rcParams["timezone"] = "UTC"
+        rcParams["patch.antialiased"] = "True"
+        rcParams["font.family"] = "sans-serif"
+        rcParams["font.size"] = "12.0"
+        rcParams["font.serif"] = ["Times", "Palatino", "New Century Schoolbook",
+                                  "Bookman", "Computer Modern Roman",
+                                  "Times New Roman"]
+        rcParams["font.sans-serif"] = ["Helvetica", "Avant Garde",
+                                       "Computer Modern Sans serif", "Arial"]
+        rcParams["axes.color_cycle"] = ["#333333", "348ABD", "7A68A6", "A60628",
+                                        "467821", "CF4457", "188487", "E24A33"]
+        rcParams["legend.fancybox"] = "True"
+        rcParams["figure.figsize"] = "11, 8"
+        rcParams["figure.facecolor"] = "1.0"
+        rcParams["figure.edgecolor"] = "0.50"
+        rcParams["figure.subplot.hspace"] = "0.5"
+
+    def apply_theme(self, ax):
+        """"Styles x,y axes to appear like ggplot2
+        Must be called after all plot and axis manipulation operations have
+        been carried out (needs to know final tick spacing)
+        From: https://github.com/wrobstory/climatic/blob/master/climatic/stylers.py
+        """
+        # Remove axis border
+        for child in ax.get_children():
+            if isinstance(child, plt.spines.Spine):
+                child.set_alpha(0)
+
+        # Restyle the tick lines
+        for line in ax.get_xticklines() + ax.get_yticklines():
+            line.set_markersize(5)
+            line.set_markeredgewidth(1.4)
+
+        # Only show bottom left ticks
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+
+        # Set minor grid lines
+        ax.grid(True, 'minor', color='#F2F2F2', linestyle='-', linewidth=0.7)
+
+        if not isinstance(ax.xaxis.get_major_locator(), plt.ticker.LogLocator):
+            ax.xaxis.set_minor_locator(plt.ticker.AutoMinorLocator(2))
+        if not isinstance(ax.yaxis.get_major_locator(), plt.ticker.LogLocator):
+            ax.yaxis.set_minor_locator(plt.ticker.AutoMinorLocator(2))
+
+
+class Theme_538(Theme):
+    """
+    Theme for 538.
+    http://dataorigami.net/blogs/napkin-folding/17543615-replicating-538s-plot-styles-in-matplotlib
+    """
+    def __init__(self):
+        super(self.__class__, self).__init__()
+        self._rcParams["lines.linewidth"] = "2.0"
+        self._rcParams["patch.linewidth"] = "0.5"
+        self._rcParams["legend.fancybox"] = "True"
+        self._rcParams["axes.color_cycle"] = [ "#30a2da", "#fc4f30", "#e5ae38",
+                                               "#6d904f", "#8b8b8b"]
+        self._rcParams["axes.facecolor"] = "#f0f0f0"
+        self._rcParams["axes.labelsize"] = "large"
+        self._rcParams["axes.axisbelow"] = "True"
+        self._rcParams["axes.grid"] = "True"
+        self._rcParams["patch.edgecolor"] = "#f0f0f0"
+        self._rcParams["axes.titlesize"] = "x-large"
+        self._rcParams["svg.embed_char_paths"] = "path"
+        self._rcParams["figure.facecolor"] = "#f0f0f0"
+        self._rcParams["grid.linestyle"] = "-"
+        self._rcParams["grid.linewidth"] = "1.0"
+        self._rcParams["grid.color"] = "#cbcbcb"
+        self._rcParams["axes.edgecolor"] = "#f0f0f0"
+        self._rcParams["xtick.major.size"] = "0"
+        self._rcParams["xtick.minor.size"] = "0"
+        self._rcParams["ytick.major.size"] = "0"
+        self._rcParams["ytick.minor.size"] = "0"
+        self._rcParams["axes.linewidth"] = "3.0"
+        self._rcParams["font.size"] = "14.0"
+        self._rcParams["lines.linewidth"] = "4"
+        self._rcParams["lines.solid_capstyle"] = "butt"
+        self._rcParams["savefig.edgecolor"] = "#f0f0f0"
+        self._rcParams["savefig.facecolor"] = "#f0f0f0"
+        self._rcParams["figure.subplot.left"]   = "0.08"
+        self._rcParams["figure.subplot.right"]  = "0.95"
+        self._rcParams["figure.subplot.bottom"] = "0.07"
+
+    def apply_theme(self, ax):
+        '''Styles x,y axes to appear like ggplot2
+        Must be called after all plot and axis manipulation operations have
+        been carried out (needs to know final tick spacing)
+        From: https://github.com/wrobstory/climatic/blob/master/climatic/stylers.py
+        '''
+        # Remove axis border
+        for child in ax.get_children():
+            if isinstance(child, plt.spines.Spine):
+                child.set_alpha(0)
+
+        # Restyle the tick lines
+        for line in ax.get_xticklines() + ax.get_yticklines():
+            line.set_markersize(5)
+            line.set_markeredgewidth(1.4)
+
+        # Only show bottom left ticks
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+
+        # Set minor grid lines
+        ax.grid(True, 'minor', color='#F2F2F2', linestyle='-', linewidth=0.7)
+
+        if not isinstance(ax.xaxis.get_major_locator(), plt.ticker.LogLocator):
+            ax.xaxis.set_minor_locator(plt.ticker.AutoMinorLocator(2))
+        if not isinstance(ax.yaxis.get_major_locator(), plt.ticker.LogLocator):
+            ax.yaxis.set_minor_locator(plt.ticker.AutoMinorLocator(2))
+
+
+class Theme_Gray(Theme):
+    """
+    Standard theme for ggplot. Gray background w/ white gridlines.
+    Copied from the the ggplot2 codebase:
+        https://github.com/hadley/ggplot2/blob/master/R/theme-defaults.r
+    """
+    def __init__(self):
+        super(self.__class__, self).__init__()
+        self._rcParams["timezone"] = "UTC"
+        self._rcParams["lines.linewidth"] = "1.0"
+        self._rcParams["lines.antialiased"] = "True"
+        self._rcParams["patch.linewidth"] = "0.5"
+        self._rcParams["patch.facecolor"] = "348ABD"
+        self._rcParams["patch.edgecolor"] = "#E5E5E5"
+        self._rcParams["patch.antialiased"] = "True"
+        self._rcParams["font.family"] = "sans-serif"
+        self._rcParams["font.size"] = "12.0"
+        self._rcParams["font.serif"] = ["Times", "Palatino",
+                                        "New Century Schoolbook",
+                                        "Bookman", "Computer Modern Roman",
+                                        "Times New Roman"]
+        self._rcParams["font.sans-serif"] = ["Helvetica", "Avant Garde",
+                                             "Computer Modern Sans serif",
+                                             "Arial"]
+        self._rcParams["axes.facecolor"] = "#E5E5E5"
+        self._rcParams["axes.edgecolor"] = "bcbcbc"
+        self._rcParams["axes.linewidth"] = "1"
+        self._rcParams["axes.grid"] = "True"
+        self._rcParams["axes.titlesize"] = "x-large"
+        self._rcParams["axes.labelsize"] = "large"
+        self._rcParams["axes.labelcolor"] = "black"
+        self._rcParams["axes.axisbelow"] = "True"
+        self._rcParams["axes.color_cycle"] = ["#333333", "348ABD", "7A68A6",
+                                              "A60628",
+                                              "467821", "CF4457", "188487",
+                                              "E24A33"]
+        self._rcParams["grid.color"] = "white"
+        self._rcParams["grid.linewidth"] = "1.4"
+        self._rcParams["grid.linestyle"] = "solid"
+        self._rcParams["xtick.major.size"] = "0"
+        self._rcParams["xtick.minor.size"] = "0"
+        self._rcParams["xtick.major.pad"] = "6"
+        self._rcParams["xtick.minor.pad"] = "6"
+        self._rcParams["xtick.color"] = "#444444"
+        self._rcParams["xtick.direction"] = "out"  # pointing out of axis
+        self._rcParams["ytick.major.size"] = "0"
+        self._rcParams["ytick.minor.size"] = "0"
+        self._rcParams["ytick.major.pad"] = "6"
+        self._rcParams["ytick.minor.pad"] = "6"
+        self._rcParams["ytick.color"] = "#444444"
+        self._rcParams["ytick.direction"] = "out"  # pointing out of axis
+        self._rcParams["legend.fancybox"] = "True"
+        self._rcParams["figure.figsize"] = "11, 8"
+        self._rcParams["figure.facecolor"] = "1.0"
+        self._rcParams["figure.edgecolor"] = "0.50"
+        self._rcParams["figure.subplot.hspace"] = "0.5"
+
+    def apply_theme(self, ax):
+        '''Styles x,y axes to appear like ggplot2
+        Must be called after all plot and axis manipulation operations have
+        been carried out (needs to know final tick spacing)
+        From: https://github.com/wrobstory/climatic/blob/master/climatic/stylers.py
+        '''
+        # Remove axis border
+        for child in ax.get_children():
+            if isinstance(child, plt.spines.Spine):
+                child.set_alpha(0)
+
+        # Restyle the tick lines
+        for line in ax.get_xticklines() + ax.get_yticklines():
+            line.set_markersize(5)
+            line.set_markeredgewidth(1.4)
+
+        # Only show bottom left ticks
+        ax.xaxis.set_ticks_position('bottom')
+        ax.yaxis.set_ticks_position('left')
+
+        # Set minor grid lines
+        ax.grid(True, 'minor', color='#F2F2F2', linestyle='-', linewidth=0.7)
+
+        if not isinstance(ax.xaxis.get_major_locator(), plt.ticker.LogLocator):
+            ax.xaxis.set_minor_locator(plt.ticker.AutoMinorLocator(2))
+        if not isinstance(ax.yaxis.get_major_locator(), plt.ticker.LogLocator):
+            ax.yaxis.set_minor_locator(plt.ticker.AutoMinorLocator(2))
+
+
+class Theme_Matplotlib(Theme):
+    def __init__(self, **kwargs):
+        super(self.__class__, self).__init__(**kwargs)
+        self.update(**plt.rcParamsDefault)
+        plt.ion()
+
+
+class Theme_Ezrc(Theme):
+    def __init__(self, fontSize=16., lineWidth=1., labelSize=None,
+                 tickmajorsize=10, tickminorsize=5, figsize=(8, 6)):
+
+        if labelSize is None:
+            labelSize = fontSize + 2
+        rcParams = {}
+        rcParams['figure.figsize'] = figsize
+        rcParams['lines.linewidth'] = lineWidth
+        rcParams['grid.linewidth'] = lineWidth
+        rcParams['font.sans-serif'] = ['Helvetica']
+        rcParams['font.serif'] = ['Helvetica']
+        rcParams['font.family'] = ['Times New Roman']
+        rcParams['font.size'] = fontSize
+        rcParams['font.family'] = 'serif'
+        rcParams['font.weight'] = 'bold'
+        rcParams['axes.linewidth'] = lineWidth
+        rcParams['axes.labelsize'] = labelSize
+        rcParams['legend.borderpad'] = 0.1
+        rcParams['legend.markerscale'] = 1.
+        rcParams['legend.fancybox'] = False
+        rcParams['text.usetex'] = True
+        rcParams['image.aspect'] = 'auto'
+        rcParams['ps.useafm'] = True
+        rcParams['ps.fonttype'] = 3
+        rcParams['xtick.major.size'] = tickmajorsize
+        rcParams['xtick.minor.size'] = tickminorsize
+        rcParams['ytick.major.size'] = tickmajorsize
+        rcParams['ytick.minor.size'] = tickminorsize
+        rcParams['text.latex.preamble'] = ["\\usepackage{amsmath}"]
+        super(self.__class__, self).__init__(**rcParams)
+        plt.ion()
+
+
+class Theme_Latex(Theme):
+    def __init__(self, fontSize=None, labelSize=None):
+
+        rcParams = {}
+        if fontSize is not None:
+            if labelSize is None:
+                labelSize = fontSize
+
+            rcParams['font.sans-serif'] = ['Helvetica']
+            rcParams['font.serif'] = ['Helvetica']
+            rcParams['font.family'] = ['Times New Roman']
+            rcParams['font.size'] = fontSize
+            rcParams["axes.labelsize"] = labelSize
+            rcParams["axes.titlesize"] = labelSize
+            rcParams["xtick.labelsize"] = labelSize
+            rcParams["ytick.labelsize"] = labelSize
+            rcParams["legend.fontsize"] = fontSize
+            rcParams['font.family'] = 'serif'
+            rcParams['font.weight'] = 'bold'
+            rcParams['axes.labelsize'] = labelSize
+            rcParams['text.usetex'] = True
+            rcParams['ps.useafm'] = True
+            rcParams['ps.fonttype'] = 3
+            rcParams['text.latex.preamble'] = ["\\usepackage{amsmath}"]
+
+        super(self.__class__, self).__init__(**rcParams)
+        plt.ion()
+
+
+class Theme_TightLayout(Theme):
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+        super(self.__class__, self).__init__()
+
+    def post_callback(self, *args, **kwargs):
+        self.kwargs.update(kwargs)
+        plt.tight_layout(**self.kwargs)

@@ -23,10 +23,21 @@ try:
 except ImportError:
     figrc = None
 
+
+import sys
+PY3 = sys.version_info[0] > 2
+
+if PY3:
+    basestring = (str, bytes)
+else:
+    range = xrange
+    basestring = (str, unicode)
+
 import matplotlib.patheffects as PathEffects
 
 
-def MAP(x, y, xmin, xmax, ymin, ymax, nsamp=1000, xnorm=6, ynorm=0.5, errorfloor=1e-4):
+def MAP(x, y, xmin, xmax, ymin, ymax, nsamp=1000, xnorm=6, ynorm=0.5,
+        errorfloor=1e-4, autonorm=True):
     """
     Resample the data to approximate its noisy distribution.
 
@@ -69,6 +80,63 @@ def MAP(x, y, xmin, xmax, ymin, ymax, nsamp=1000, xnorm=6, ynorm=0.5, errorfloor
 
     beta: float
         MAP intercept of the model
+
+    d: float
+        dispersion around the model
+    """
+
+    xdata, ydata = sample_data(x, y, xmin, xmax, ymin, ymax, nsamp=nsamp,
+                               errorfloor=errorfloor)
+
+    xdata = np.array(xdata).ravel()
+    ydata = np.array(ydata).ravel()
+
+    ind = np.isfinite(xdata) & np.isfinite(ydata) & (xdata > 0) & (ydata > 0)
+    xdata = np.log10(xdata[ind])
+    ydata = np.log10(ydata[ind])
+
+    alpha, beta, delta = OLS_MAP(xdata - xnorm, ydata - ynorm)
+
+    return alpha, beta, delta
+
+
+def sample_data(x, y, xmin, xmax, ymin, ymax, nsamp=1000, errorfloor=1e-4):
+    """
+    Resample the data to approximate its noisy distribution.
+
+    Parameters
+    ----------
+    x: ndarray
+        x-coordinates
+
+    y: ndarray
+        y-coordinates
+
+    xmin: ndarray
+        lower uncertainty on x
+
+    xmax: ndarray
+        upper uncertainty on x
+
+    ymin: ndarray
+        lower uncertainty on y
+
+    ymax: ndarray
+        upper uncertainty on y
+
+    nsamp: int, optional
+        number of samples to draw from the uncertainties (per input point)
+
+    errorfloor: float, optional
+        add a small sigma to the random draws to avaid issues with null uncertainties
+
+    Returns
+    -------
+    xdata: ndarray, shape = Nsamp , Npts
+        x sequence resampled from errors
+
+    ydata: ndarray, shape = Nsamp , Npts
+        y sequence resampled from errors
     """
     xdata = []
     ydata = []
@@ -86,23 +154,57 @@ def MAP(x, y, xmin, xmax, ymin, ymax, nsamp=1000, xnorm=6, ynorm=0.5, errorfloor
         xdata.append(x[k] - np.abs(np.random.normal(0, xmin[k] + errorfloor, nsamp)))
         ydata.append(y[k] + np.abs(np.random.normal(0, ymax[k] + errorfloor, nsamp)))
 
-    xdata = np.array(xdata).ravel()
-    ydata = np.array(ydata).ravel()
-    ind = np.isfinite(xdata) & np.isfinite(ydata) & (xdata > 0) & (ydata > 0)
-    xdata = np.log10(xdata[ind])
-    ydata = np.log10(ydata[ind])
+    return xdata, ydata
 
-    cov = np.cov(xdata, ydata)
 
-    alpha = cov[1,0] / (cov[0, 0])
-    beta = (ydata - ynorm).mean() - alpha * (xdata - xnorm).mean()
+def OLS_MAP(X, Y):
+    """ Perpendicular/Orthogonal least square maximum a posteriori
+
+    .. math::
+
+        y( x | a, b) = a x + b
+
+    Parameters
+    ----------
+    X: ndarray
+        x sequence
+
+    Y: ndarray
+        y sequence
+
+    Returns
+    -------
+    a: float
+        slope
+
+    b: float
+        intercept
+
+    d: float
+        dispersion around the model
+
+    .. note::
+
+        http://mathworld.wolfram.com/LeastSquaresFittingPerpendicularOffsets.html
+    """
+    ind = np.isfinite(X) & np.isfinite(Y)
+    x = X[ind]
+    y = Y[ind]
+    n = len(x)
+    c = np.cov(x, y)
+    sxx = n * c[0, 0]
+    syy = n * c[1, 1]
+    sxy = (n - 1) * np.cov(x, y)[1, 0]
+
+    a = 0.5 * (syy - sxx + np.sqrt( (syy - sxx) ** 2 + 4 * sxy ** 2) ) / sxy
+    b = y.mean() - a * x.mean()
 
     # trying to get residual perpendicularly to the line
-    v = 1. / np.sqrt( 1. + alpha ** 2) * np.array([-alpha, 1 ])
-    vects = np.vstack([xdata - xdata.mean(), ydata - ydata.mean()]).T
-    delta = (np.array([np.dot(v, k) for k in vects]) ** 2).sum()
+    v = 1. / np.sqrt( 1. + a ** 2) * np.array([-a, 1 ])
+    vects = np.vstack([x - x.mean(), y - y.mean()]).T
+    delta = np.sqrt((np.array([np.dot(v, k) for k in vects]) ** 2).sum())
 
-    return alpha, beta, (delta / len(xdata - 1)) ** 0.5
+    return a, b, (delta / len(x - 1)) ** 0.5
 
 
 def __calc_min_interval(x, alpha):
@@ -347,7 +449,7 @@ def fastkde(x, y, gridsize=(200, 200), extents=None, nocorrelation=False,
 
     # First, determine the bandwidth using Scott's rule
     # (note that Silvermann's rule gives the # same value for 2d datasets)
-    std_devs = np.diag(np.sqrt(cov))
+    std_devs = np.sqrt(np.diag(cov))
     kern_nx, kern_ny = np.round(scotts_factor * 2 * np.pi * std_devs)
 
     # Determine the bandwidth to use for the gaussian kernel
@@ -383,7 +485,8 @@ def fastkde(x, y, gridsize=(200, 200), extents=None, nocorrelation=False,
 
 def main(fname='Galaxy_NSCs_reff_early.dat', nsamp=50, nboot=1000,
          savefig=False, xfloor=10, yfloor=10, xnorm=6, ynorm=0.5,
-         null_threshold=1e-6, sigma_samp=0, x12label='', y12label=''):
+         null_threshold=1e-6, sigma_samp=0, x12label='', y12label='',
+         extents=None, autonorm=True):
     """ Main function that runs the fit and plots
 
         Parameters
@@ -418,6 +521,12 @@ def main(fname='Galaxy_NSCs_reff_early.dat', nsamp=50, nboot=1000,
         sigma_samp: int, optional
             if > 0, the plot will include model representations of sigma_samp
             draws over the intrinsic dispersion given a slope and intercept
+
+        extents: tuple
+            optional (xmin, xmax, ymin, ymax) extensions of the main plot
+
+        autonorm: bool
+            set to find the autonormalization of the data
     """
 
     # read the file
@@ -451,6 +560,12 @@ def main(fname='Galaxy_NSCs_reff_early.dat', nsamp=50, nboot=1000,
 
     # Trying to optimize plot transparencies
     plt_alpha = 0.8 / (5 * np.log10(nboot * nsamp * 100 * (1 + sigma_samp)))
+
+    if autonorm is True:
+        xnorm = np.nanmean(np.log10(x))
+        ynorm = np.nanmean(np.log10(y))
+        print('Autonorms: ', xnorm, ynorm)
+
     for k in range(nboot):
         ind = np.random.randint(0, len(x), len(x))
         alpha, beta, delta = MAP(x[ind], y[ind],
@@ -507,12 +622,18 @@ def main(fname='Galaxy_NSCs_reff_early.dat', nsamp=50, nboot=1000,
     ax_xy.errorbar(x, y, xerr=[xmin,xmax], yerr=[ymin, ymax], linestyle='none', color='k')
 
     # polish limits
-    margins = 0.05  # fractional margins
-    xlim = (logxmod.min(), logxmod.max())
-    xlim = [xlim[0] - margins * np.diff(xlim), xlim[1] + margins * np.diff(xlim)]
-    ax_xy.set_xlim(10 ** xlim[0], 10 ** xlim[1])
-    ylim = [ylim[0] - margins * np.diff(ylim), ylim[1] + margins * np.diff(ylim)]
-    ax_xy.set_ylim(10 ** ylim[0], 10 ** ylim[1])
+    if extents is None:
+        margins = 0.05  # fractional margins
+        xlim = (logxmod.min(), logxmod.max())
+        xlim = [xlim[0] - margins * np.diff(xlim), xlim[1] + margins * np.diff(xlim)]
+        ax_xy.set_xlim(10 ** xlim[0], 10 ** xlim[1])
+        ylim = [ylim[0] - margins * np.diff(ylim), ylim[1] + margins * np.diff(ylim)]
+        ax_xy.set_ylim(10 ** ylim[0], 10 ** ylim[1])
+    else:
+        if type(extents) in basestring:
+            extents = [float(k) for k in extents.split(',')]
+        ax_xy.set_xlim(10 ** extents[0], 10 ** extents[1])
+        ax_xy.set_ylim(10 ** extents[2], 10 ** extents[3])
 
     _xlabel = r'' + x12label
     _ylabel = r'' + y12label
@@ -592,48 +713,55 @@ def main(fname='Galaxy_NSCs_reff_early.dat', nsamp=50, nboot=1000,
 if __name__ == '__main__':
 
     # read config file first to get default values
+    import pyconfig
+    import os
 
-    opts = (
-        ('-f', '--savefig', dict(dest="savefig", default='False',  help="Generate figures with the desired format (pdf, png...)", type='str')),
-        ('-n', '--nsamp',   dict(dest="nsamp", help="number of samples to represent per data point uncertainties", default=20, type='int')),
-        ('-N', '--nboot',   dict(dest="nboot", help="number of bootstrap realization", default=100, type='int')),
-        ('--xnorm',   dict(dest="xnorm", help="x-data normalization value", default=6, type='float')),
-        ('--ynorm',   dict(dest="ynorm", help="y-data normalization value", default=0.5, type='float')),
-        ('--xfloor',   dict(dest="xfloor", help="floor of x-value uncertainty (in %)", default=10, type='float')),
-        ('--yfloor',   dict(dest="yfloor", help="floor of y-value uncertainty (in %)", default=10, type='float')),
-        ('--sigma_samp',   dict(dest="sigma_samp", help="number of samplings to represent the intrinsic dispersion of the plot", default=0, type='int')),
-        ('-o', '--output',   dict(dest="output", help="export the samples into a file", default='None', type='str')),
-        ('--x12label',   dict(dest="x12label", help="X-label of the top-right plot (it can be in latex form)", default='None', type='str')),
-        ('--y12label',   dict(dest="y12label", help="Y-label of the top-right plot (it can be in latex form)", default='None', type='str')),
-        ('-c', '--config',   dict(dest="configfname", help="Configuration file to use for default values", default='None', type='str')),
+    opts = dict(
+        default=(
+            ('-n', '--nsamp',   dict(dest="nsamp", help="number of samples to represent per data point uncertainties", default=20, type='int')),
+            ('-N', '--nboot',   dict(dest="nboot", help="number of bootstrap realization", default=100, type='int')),
+            ('-c', '--config',   dict(dest="configfname", help="Configuration file to use for default values", default='None', type='str')),
+            ('--xnorm',   dict(dest="xnorm", help="x-data normalization value", default=6, type='float')),
+            ('--ynorm',   dict(dest="ynorm", help="y-data normalization value", default=0.5, type='float')),
+            ('--autonorm', dict(action="store_true", default=False, dest='autonorm', help='Auto normalization values')),
+            ('--xfloor',   dict(dest="xfloor", help="floor of x-value uncertainty (in %)", default=10, type='float')),
+            ('--yfloor',   dict(dest="yfloor", help="floor of y-value uncertainty (in %)", default=10, type='float')),
+        ),
+        outputs=(
+            ('-o', '--output',   dict(dest="output", help="export the samples into a file", default='None', type='str')),
+            ('-f', '--savefig', dict(dest="savefig", default='False',  help="Generate figures with the desired format (pdf, png...)", type='str')),
+        ),
+        plotting=(
+            ('--x12label',   dict(dest="x12label", help="X-label of the top-right plot (it can be in latex form)", default='None', type='str')),
+            ('--y12label',   dict(dest="y12label", help="Y-label of the top-right plot (it can be in latex form)", default='None', type='str')),
+            ('--sigma_samp',   dict(dest="sigma_samp", help="number of samplings to represent the intrinsic dispersion of the plot", default=0, type='int')),
+            ('--extents',   dict(dest="extents", help="xmin, xmax, ymin, ymax values of the main plot (log values)", default=None, type='str')),
+        )
     )
 
-    from optparse import OptionParser
-    parser = OptionParser(__doc__)
-
-    for ko in opts:
-        parser.add_option(*ko[:-1], **ko[-1])
+    parser = pyconfig.make_parser_from_options(*opts.items(), usage=__doc__)
 
     (options, args) = parser.parse_args()
 
     configfname = options.__dict__.pop('configfname')
 
     if configfname not in [None, 'None', 'none']:
-        from configparser import ConfigParser
-        config = ConfigParser()
-        config.read(configfname)
-        kwargs = config['BTMC']
+        if os.path.isfile(configfname):
+            parser = pyconfig.update_default_from_config_file(configfname,
+                                                              *opts.items(),
+                                                              usage=__doc__)
+        else:
+            # save configuration
+            print('Exporting configuration to {0}'.format(configfname))
+            txt = pyconfig.generate_conf_file_from_opts(*opts.items())
+            with open(configfname, 'w') as f:
+                f.write(txt)
 
-        parser = OptionParser()
-        for ko in opts:
-            key = ko[:-1]
-            cfg = ko[-1]
-            if cfg['dest'] in kwargs:
-                cfg['default'] = kwargs[cfg['dest']]
+    (options, args) = parser.parse_args()
 
-            parser.add_option(*ko[:-1], **ko[-1])
-
+    configfname = options.__dict__.pop('configfname')
     output = options.__dict__.pop('output')
+
     models = main(*args, **options.__dict__)
 
     if output not in ('None', 'none', None):
