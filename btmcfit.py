@@ -204,7 +204,7 @@ def OLS_MAP(X, Y):
     vects = np.vstack([x - x.mean(), y - y.mean()]).T
     delta = np.sqrt((np.array([np.dot(v, k) for k in vects]) ** 2).sum())
 
-    return a, b, (delta / len(x - 1)) ** 0.5
+    return a, b, (delta / (len(x) - 1)) ** 0.5
 
 
 def __calc_min_interval(x, alpha):
