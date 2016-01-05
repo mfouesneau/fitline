@@ -5,26 +5,32 @@ This repository is an exercise I had with `Iskren Georgiev`_ when he was
 looking at linear correlations between the stellar mass of galaxies and the
 properties of their central nuclear star cluster.
 
-The approach here is neither frequentist nor Bayesian but more like in between.
-We explored how to quickly get fits through his data even when the uncertainties
-were non-symmetric or upper limits.
+The approach here is neither frequentist nor fully Bayesian but more like in
+between. In this approach, we sample the likelihood space instead of the prior
+one to construct the posterior distribution. 
+In addition, we explored how to quickly get fits through his data even when the
+uncertainties were non-symmetric or upper limits.
 
 The full mcmc approach is also included in the repository.
 
 .. _Iskren Georgiev: http://www.mpia.de/homes/georgiev/
 
-Full documentation: http://mfouesneau.github.io/docs/fitline/
-
 Example usage
 -------------
 
+The example below analyses the sample data from  `Iskren Georgiev`_'s paper. 
+This run samples the likelihood using a split-normal distribution to account for
+non-symmetric uncertainties, and bootstrap the data to include that the dataset
+is relatively sparse.
+
 .. code:: python
 
-        python btmcfit.py reff_NSC_Mass_late.dat -o reff_NSC_Mass_late_samp.dat \
-                -N 1500 -n 1 --xfloor 10 --yfloor 10 --sigma_samp 0 \
+        ./fit.py reff_NSC_Mass_late.dat -o reff_NSC_Mass_late.theta.dat \
+                -b -n 5000 --xfloor 10 --yfloor 10 \
+                --log_xnorm 6 --log_ynorm 1 \
                 --x12label '${\cal M}_{\rm NSC}$' \
                 --y12label '$r_{\rm eff,NSC}$' \
-                --autonorm
+                -f
 
 .. image:: doc/example.png
 
@@ -39,18 +45,20 @@ configuration file.
 Options
 ~~~~~~~
 
+.. code:: bash
+
+        ./fit --help for options
+
 **fitting options**
 
 +-------------------------+-------------------------------------------------------------+
 |  -n, --nsamp            |  number of samples to represent per data point uncertainties|
 +-------------------------+-------------------------------------------------------------+
-|  -N, --nboot            |  number of bootstrap realization                            |
+|  -b, --bootstrap        |  include bootstrapping from the dataset                     |
 +-------------------------+-------------------------------------------------------------+
-|  --xnorm                |  x-data normalization value                                 |
+|  --log_xnorm            |  x-data normalization value                                 |
 +-------------------------+-------------------------------------------------------------+
-|  --ynorm                |  y-data normalization value                                 |
-+-------------------------+-------------------------------------------------------------+
-|  --autonorm             |  find most suitable normalization (overwrite --{x,y}norm)   |
+|  --log_ynorm            |  y-data normalization value                                 |
 +-------------------------+-------------------------------------------------------------+
 |  --xfloor               |  floor of x-value uncertainty (in %)                        |
 +-------------------------+-------------------------------------------------------------+
@@ -67,15 +75,11 @@ Options
 
 **plotting options**
 
-+------------------------+------------------------------------------------------------------------+
-|  --sigma_samp          |   number of samplings to represent the intrinsic dispersion of the plot|
-+------------------------+------------------------------------------------------------------------+
-|  --x12label=X12LABEL   |   X-label of the top-right plot (it can be in latex form)              |
-+------------------------+------------------------------------------------------------------------+
-|  --y12label=Y12LABEL   |   Y-label of the top-right plot (it can be in latex form)              |
-+------------------------+------------------------------------------------------------------------+
-|  --extents             |  Limits of the main x,y plot (in log)                                  |
-+------------------------+------------------------------------------------------------------------+
++------------------------+--------------------------------------------------------------+
+|  --xlabel=XLABEL       |   X-label of the top-right plot (it can be in latex form)    |
++------------------------+--------------------------------------------------------------+
+|  --ylabel=YLABEL       |   Y-label of the top-right plot (it can be in latex form)    |
++------------------------+--------------------------------------------------------------+
                                                                                                  
 **special options**                                                                             
 
