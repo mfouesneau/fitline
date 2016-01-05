@@ -32,7 +32,7 @@ is relatively sparse.
                 --y12label '$r_{\rm eff,NSC}$' \
                 -f
 
-.. image:: doc/example.png
+.. image:: reff_NSC_Mass_late.png
 
 
 Command line details
