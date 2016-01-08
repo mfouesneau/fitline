@@ -83,7 +83,7 @@ public:
     Data(std::string fname){
 
         // read the file
-        std::ifstream is("reff_NSC_Mass_late.dat");
+        std::ifstream is(fname);
 
         std::vector< std::vector<T> > mat;
 
