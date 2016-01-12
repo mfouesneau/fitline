@@ -290,8 +290,8 @@ void OSL_MAP(std::vector<std::vector<double> >& data,
 
     // calculate mean values
     // std::cout << data[0][0] << "  " << data[1][0];
-    double mx = nan_mean(data[0]);
-    double my = nan_mean(data[1]);
+    double mx = nan_mean<double>(data[0]);
+    double my = nan_mean<double>(data[1]);
     // std::cout << "mx, my " << mx << "  " << my << std::endl;
 
     // calculate n * variances and n-1 * covariance
@@ -302,9 +302,9 @@ void OSL_MAP(std::vector<std::vector<double> >& data,
             }
     }
     // std::cout << count_notnan(xdata, ydata) << std::endl;
-    double sx = nan_var(data[0]) * (double) Nvalid;
-    double sy = nan_var(data[1]) * (double) Nvalid;
-    double sxy = nan_cov(data[0], data[1]) * (double)(Nvalid - 1);
+    double sx = nan_var<double>(data[0]) * (double) Nvalid;
+    double sy = nan_var<double>(data[1]) * (double) Nvalid;
+    double sxy = nan_cov<double>(data[0], data[1]) * (double)(Nvalid - 1);
 
     // get slope a and offset b:  y| a, b ~ a * x + b
     double a = 0.5 * (sy - sx +
@@ -593,6 +593,8 @@ int main(int argc, char *argv[])
         exit(0);
     }
 
+    if (opt.has_option("--mock"))
+        run_mock = true;
     if (opt.has_option("--mock_N"))
         Ndata = opt.get_option<size_t>("--mock_N");
     if (opt.has_option("--mock_a"))

@@ -1,8 +1,11 @@
+SRCDIR = .
+CXXFLAGS = -I${SRCDIR} -std=c++11 -Wall -Wextra -pedantic -DNDEBUG -g
+CPP_FILES := $(wildcard $(SRCDIR)/*.cc)
+
 all: fit
 
-fit:
-	g++ -Wall -g -std=c++11 mfstats.cc fit.cc -o fit
+fit: $(CPP_FILES)
+	g++ $(CXXFLAGS) $(CPP_FILES)  -o $@
 
 clean:
 	rm -f fit
-	rm -rf fit.dSYM
