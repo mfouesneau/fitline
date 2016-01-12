@@ -461,7 +461,8 @@ int main_data(
     // cleaning
     double xfloor = 10,
     double yfloor = 10,
-    double null_threshold=1e-6)
+    double null_threshold=1e-6,
+    std::string oname = "")
 {
     /*
      * parameters
@@ -496,14 +497,32 @@ int main_data(
     std::vector<double> b(number_of_samples);
     std::vector<double> d(number_of_samples);
 
-    for (size_t i = 0; i < number_of_samples; ++i) {
-        sample_data_pdf(mat, data, generator, errorfloor, bootstrap);
-        transform_data_sample_to_log(data, log_xnorm, log_ynorm);
-        OSL_MAP(data, theta);
+    // if output samples is set, open stream..do..close.
+    if (oname.size() > 0){
+        std::cout << "Exporting samples into " << oname << std::endl;
+        std::ofstream outputFile( oname );
+        outputFile << "#slope intercept dispersion" << std::endl;
+        for (size_t i = 0; i < number_of_samples; ++i) {
+            sample_data_pdf(mat, data, generator, errorfloor, bootstrap);
+            transform_data_sample_to_log(data, log_xnorm, log_ynorm);
+            OSL_MAP(data, theta);
 
-        a[i] = theta[0];
-        b[i] = theta[1];
-        d[i] = theta[2];
+            a[i] = theta[0];
+            b[i] = theta[1];
+            d[i] = theta[2];
+            outputFile << a[i] << " " << b[i] << " " << d[i] << std::endl;
+        }
+        outputFile.close();
+    } else {
+        for (size_t i = 0; i < number_of_samples; ++i) {
+            sample_data_pdf(mat, data, generator, errorfloor, bootstrap);
+            transform_data_sample_to_log(data, log_xnorm, log_ynorm);
+            OSL_MAP(data, theta);
+
+            a[i] = theta[0];
+            b[i] = theta[1];
+            d[i] = theta[2];
+        }
     }
 
     cout << "Results" << endl;
@@ -558,6 +577,7 @@ int main(int argc, char *argv[])
     double yfloor = 10;
     double null_threshold=1e-6;
     std::string fname = "";
+    std::string oname = "";
 
     // parse options
     // =============
@@ -576,6 +596,7 @@ int main(int argc, char *argv[])
     // real data file options
 
     opt.add_option("-i,--input" , "Input data file");
+    opt.add_option("-o,--output" , "Output sampling file");
     opt.add_option("-n,--nsamples" , 
             "Number of samples from data to generate the probability distribution");
     opt.add_option("-b,--bootstrap", "set to bootstrap the data (not only their likelihood)");
@@ -617,6 +638,8 @@ int main(int argc, char *argv[])
         yfloor = opt.get_option<double>("--yfloor");
     if (opt.has_option("--input"))
         fname = opt.get_option<std::string>("--input");
+    if (opt.has_option("--output"))
+        oname = opt.get_option<std::string>("--output");
 
     // run
     // ====
@@ -628,7 +651,7 @@ int main(int argc, char *argv[])
             exit(1);
         }
         main_data(fname, number_of_samples, errorfloor, bootstrap, log_xnorm,
-                log_ynorm, xfloor, yfloor, null_threshold);
+                log_ynorm, xfloor, yfloor, null_threshold, oname);
     }
     return 0;
 }
