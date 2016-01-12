@@ -8,7 +8,7 @@
 #include <random>
 #include <stdlib.h>
 #include "mfstats.hh"
-#include "cxxopts.hpp"
+#include "mfopts.hh"
 
 
 /**
@@ -561,62 +561,60 @@ int main(int argc, char *argv[])
 
     // parse options
     // =============
-    try{
-        cxxopts::Options options(argv[0], "Command line usage");
-        options.add_options()
-            ("h,help", "Display help message");
+    
+    mfopts::Options opt(argv[0], "");
 
-        options.add_options("Mock Data")
-            ("mock"   , "Set to run mock data sampling"         , cxxopts::value<bool>(run_mock))
-            ("mock_N" , "Number of data points in mock sample"  , cxxopts::value<double>())
-            ("mock_a" , "slope of the mock data"                , cxxopts::value<double>())
-            ("mock_b" , "intercept of the mock data"            , cxxopts::value<double>())
-            ("mock_d" , "intrinsic dispersion of the mock data" , cxxopts::value<double>());
+    opt.add_option("-h,--help", "Display help message");
 
-        options.add_options("Data")
-            ("i,input"    , "Input data file"                                                     , cxxopts::value<std::string>())
-            ("n,nsamples" , "Number of samples from data to generate the probability distribution", cxxopts::value<size_t>())
-            ("b,bootstrap", "set to bootstrap the data (not only their likelihood)"               , cxxopts::value<bool>(bootstrap))
-            ("errorfloor" , "threshold under which errors are not reliable"                       , cxxopts::value<double>())
-            ("logxnorm"   , "x-data normalization value"                                          , cxxopts::value<double>())
-            ("logynorm"   , "y-data normalization value"                                          , cxxopts::value<double>())
-            ("xfloor"     , "floor of x-value uncertainty (in %)"                                 , cxxopts::value<double>())
-            ("yfloor"     , "floor of y-value uncertainty (in %)"                                 , cxxopts::value<double>());
+    // mock data options
+    opt.add_option("--mock"   , "Set to run mock data sampling");
+    opt.add_option("--mock_N" , "Number of data points in mock sample");
+    opt.add_option("--mock_a" , "slope of the mock data");
+    opt.add_option("--mock_b" , "intercept of the mock data");
+    opt.add_option("--mock_d" , "intrinsic dispersion of the mock data");
 
-        options.parse(argc, argv);
+    // real data file options
 
-        if (options.count("help"))
-        {
-            std::cout << options.help({"", "Data", "Mock Data"}) << std::endl;
-            exit(0);
-        }
-        if (options.count("mock_N"))
-            Ndata = options["mock_N"].as<size_t>();
-        if (options.count("mock_a"))
-            mock_slope = options["mock_a"].as<double>();
-        if (options.count("mock_b"))
-            mock_intercept = options["mock_b"].as<double>();
-        if (options.count("mock_d"))
-            mock_dispersion = options["mock_d"].as<double>();
-        if (options.count("nsamples"))
-            number_of_samples = options["nsamples"].as<size_t>();
-        if (options.count("errorfloor"))
-            errorfloor = options["errorfloor"].as<double>();
-        if (options.count("logxnorm"))
-            log_xnorm = options["logxnorm"].as<double>();
-        if (options.count("logynorm"))
-            log_ynorm = options["logynorm"].as<double>();
-        if (options.count("xfloor"))
-            xfloor = options["xfloor"].as<double>();
-        if (options.count("yfloor"))
-            yfloor = options["yfloor"].as<double>();
-        if (options.count("input"))
-            fname = options["input"].as<std::string>();
+    opt.add_option("-i,--input" , "Input data file");
+    opt.add_option("-n,--nsamples" , 
+            "Number of samples from data to generate the probability distribution");
+    opt.add_option("-b,--bootstrap", "set to bootstrap the data (not only their likelihood)");
+    opt.add_option("--errorfloor" , "threshold under which errors are not reliable");
+    opt.add_option("--logxnorm" , "x-data normalization value");
+    opt.add_option("--logynorm" , "y-data normalization value");
+    opt.add_option("--xfloor" , "floor of x-value uncertainty (in %)");
+    opt.add_option("--yfloor" , "floor of y-value uncertainty (in %)");
 
-    } catch (const cxxopts::OptionException& e) {
-        std::cout << "error parsing options: " << e.what() << std::endl;
-        exit(1);
+    opt.parse_options(argc, argv);
+
+    if (opt.has_option("--help"))
+    {
+        std::cout << opt.help() << std::endl;
+        exit(0);
     }
+
+    if (opt.has_option("--mock_N"))
+        Ndata = opt.get_option<size_t>("--mock_N");
+    if (opt.has_option("--mock_a"))
+        mock_slope = opt.get_option<double>("--mock_a");
+    if (opt.has_option("--mock_b"))
+        mock_intercept = opt.get_option<double>("--mock_b");
+    if (opt.has_option("--mock_d"))
+        mock_dispersion = opt.get_option<double>("--mock_d");
+    if (opt.has_option("--nsamples"))
+        number_of_samples = opt.get_option<size_t>("--nsamples");
+    if (opt.has_option("--errorfloor"))
+        errorfloor = opt.get_option<double>("--errorfloor");
+    if (opt.has_option("--logxnorm"))
+        log_xnorm = opt.get_option<double>("--logxnorm");
+    if (opt.has_option("--logynorm"))
+        log_ynorm = opt.get_option<double>("--logynorm");
+    if (opt.has_option("--xfloor"))
+        xfloor = opt.get_option<double>("--xfloor");
+    if (opt.has_option("--yfloor"))
+        yfloor = opt.get_option<double>("--yfloor");
+    if (opt.has_option("--input"))
+        fname = opt.get_option<std::string>("--input");
 
     // run
     // ====
@@ -632,6 +630,5 @@ int main(int argc, char *argv[])
     }
     return 0;
 }
-
 
 // vim: expandtab:ts=4:softtabstop=4:shiftwidth=4
