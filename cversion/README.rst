@@ -20,32 +20,36 @@ Options are given with the usual `-h` or `--help`
         Usage:
           ./fit [OPTION...] Command line usage
 
-          -h, --help  Display help message
+-h, --help  Display help message
 
-         Data options:
+Data options:
 
-          -i, --input arg       Input data file
-          -o, --output arg      output samples to file
-          -n, --nsamples arg    Number of samples from data to generate the
-                                probability distribution
-          -b, --bootstrap       set to bootstrap the data (not only their likelihood)
-              --errorfloor arg  threshold under which errors are not reliable
-              --logxnorm arg    x-data normalization value
-              --logynorm arg    y-data normalization value
-              --xfloor arg      floor of x-value uncertainty (in %)
-              --yfloor arg      floor of y-value uncertainty (in %)
+-i, --input arg       Input data file
+-o, --output arg      output samples to file
+-n, --nsamples arg    Number of samples from data to generate the
+                probability distribution
+-b, --bootstrap       set to bootstrap the data (not only their likelihood)
+--errorfloor arg  threshold under which errors are not reliable
+--logxnorm arg    x-data normalization value
+--logynorm arg    y-data normalization value
+--xfloor arg      floor of x-value uncertainty (in %)
+--yfloor arg      floor of y-value uncertainty (in %)
 
-         Mock Data options:
+Mock Data options:
 
-              --mock        Set to run mock data sampling
-              --mock_N arg  Number of data points in mock sample
-              --mock_a arg  slope of the mock data
-              --mock_b arg  intercept of the mock data
-              --mock_d arg  intrinsic dispersion of the mock data
+--mock        Set to run mock data sampling
+--mock_N arg  Number of data points in mock sample
+--mock_a arg  slope of the mock data
+--mock_b arg  intercept of the mock data
+--mock_d arg  intrinsic dispersion of the mock data
 
 To plot the results use `plot.py`
 
 .. code:: bash
 
         ./fit -i ../reff_NSC_Mass_late.dat -o tmp.out 
-        ./plot.py tmp.out -f true
+        ./plot.py tmp.out -f true \
+                --x12label '${\cal M}_{\rm NSC}$' \
+                --y12label '$r_{\rm eff,NSC}$' \
+
+.. image:: reff_NSC_Mass_late.png
