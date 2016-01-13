@@ -52,4 +52,4 @@ To plot the results use `plot.py`
                 --x12label '${\cal M}_{\rm NSC}$' \
                 --y12label '$r_{\rm eff,NSC}$' \
 
-.. image:: reff_NSC_Mass_late.png
+.. image:: ../reff_NSC_Mass_late.png
