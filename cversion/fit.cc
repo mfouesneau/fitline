@@ -499,8 +499,17 @@ int main_data(
 
     // if output samples is set, open stream..do..close.
     if (oname.size() > 0){
-        std::cout << "Exporting samples into " << oname << std::endl;
+        std::cout << "Exporting into " << oname << std::endl;
         std::ofstream outputFile( oname );
+        outputFile << "# datafile = " << fname << std::endl;
+        outputFile << "# xfloor = " << xfloor << std::endl;
+        outputFile << "# yfloor = " << yfloor << std::endl;
+        outputFile << "# bootstrap = " << bootstrap << std::endl;
+        outputFile << "# log_xnorm = " << log_xnorm << std::endl;
+        outputFile << "# log_ynorm = " << log_ynorm << std::endl;
+        outputFile << "# errorfloor = " << errorfloor << std::endl;
+        outputFile << "#" << std::endl;
+        
         outputFile << "#slope intercept dispersion" << std::endl;
         for (size_t i = 0; i < number_of_samples; ++i) {
             sample_data_pdf(mat, data, generator, errorfloor, bootstrap);
